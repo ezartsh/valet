@@ -360,3 +360,247 @@ func TestArrayValidator_CombinedRules(t *testing.T) {
 		}
 	})
 }
+
+// Tests for new array validators
+
+func TestArrayValidator_Contains(t *testing.T) {
+	schema := Schema{"roles": Array().Required().Contains("admin")}
+
+	tests := []struct {
+		name    string
+		value   []any
+		wantErr bool
+	}{
+		{"contains admin", []any{"user", "admin", "guest"}, false},
+		{"only admin", []any{"admin"}, false},
+		{"missing admin", []any{"user", "guest"}, true},
+		{"empty array", []any{}, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := Validate(DataObject{"roles": tt.value}, schema)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Contains(%v) got error = %v, wantErr = %v", tt.value, err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestArrayValidator_Contains_Multiple(t *testing.T) {
+	schema := Schema{"permissions": Array().Required().Contains("read", "write")}
+
+	tests := []struct {
+		name    string
+		value   []any
+		wantErr bool
+	}{
+		{"contains both", []any{"read", "write", "delete"}, false},
+		{"missing write", []any{"read", "execute"}, true},
+		{"missing read", []any{"write", "execute"}, true},
+		{"missing both", []any{"execute", "delete"}, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := Validate(DataObject{"permissions": tt.value}, schema)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Contains(%v) got error = %v, wantErr = %v", tt.value, err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestArrayValidator_Contains_Numbers(t *testing.T) {
+	schema := Schema{"numbers": Array().Required().Contains(float64(1), float64(2))}
+
+	tests := []struct {
+		name    string
+		value   []any
+		wantErr bool
+	}{
+		{"contains both", []any{float64(1), float64(2), float64(3)}, false},
+		{"missing 2", []any{float64(1), float64(3)}, true},
+		{"missing 1", []any{float64(2), float64(3)}, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := Validate(DataObject{"numbers": tt.value}, schema)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Contains(%v) got error = %v, wantErr = %v", tt.value, err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestArrayValidator_DoesntContain(t *testing.T) {
+	schema := Schema{"words": Array().Required().DoesntContain("forbidden")}
+
+	tests := []struct {
+		name    string
+		value   []any
+		wantErr bool
+	}{
+		{"no forbidden words", []any{"hello", "world"}, false},
+		{"contains forbidden", []any{"hello", "forbidden", "world"}, true},
+		{"only forbidden", []any{"forbidden"}, true},
+		{"empty array", []any{}, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := Validate(DataObject{"words": tt.value}, schema)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("DoesntContain(%v) got error = %v, wantErr = %v", tt.value, err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestArrayValidator_DoesntContain_Multiple(t *testing.T) {
+	schema := Schema{"tags": Array().Required().DoesntContain("spam", "nsfw", "banned")}
+
+	tests := []struct {
+		name    string
+		value   []any
+		wantErr bool
+	}{
+		{"all clean", []any{"tech", "news", "sports"}, false},
+		{"contains spam", []any{"tech", "spam"}, true},
+		{"contains nsfw", []any{"nsfw", "art"}, true},
+		{"contains banned", []any{"banned"}, true},
+		{"contains multiple forbidden", []any{"spam", "nsfw"}, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := Validate(DataObject{"tags": tt.value}, schema)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("DoesntContain(%v) got error = %v, wantErr = %v", tt.value, err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestArrayValidator_Distinct(t *testing.T) {
+	// Distinct is an alias for Unique
+	schema := Schema{"items": Array().Required().Distinct()}
+
+	tests := []struct {
+		name    string
+		value   []any
+		wantErr bool
+	}{
+		{"all unique", []any{"a", "b", "c"}, false},
+		{"has duplicate", []any{"a", "b", "a"}, true},
+		{"multiple duplicates", []any{"a", "a", "b", "b"}, true},
+		{"single element", []any{"a"}, false},
+		{"empty array", []any{}, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := Validate(DataObject{"items": tt.value}, schema)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Distinct(%v) got error = %v, wantErr = %v", tt.value, err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestArrayValidator_Contains_DoesntContain_Combined(t *testing.T) {
+	schema := Schema{
+		"permissions": Array().Required().
+			Contains("read").
+			DoesntContain("admin", "superuser"),
+	}
+
+	tests := []struct {
+		name    string
+		value   []any
+		wantErr bool
+	}{
+		{"valid - has read, no forbidden", []any{"read", "write"}, false},
+		{"invalid - missing read", []any{"write", "execute"}, true},
+		{"invalid - has admin", []any{"read", "admin"}, true},
+		{"invalid - has superuser", []any{"read", "superuser"}, true},
+		{"invalid - missing read and has admin", []any{"admin", "write"}, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := Validate(DataObject{"permissions": tt.value}, schema)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Combined(%v) got error = %v, wantErr = %v", tt.value, err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestArrayValidator_Contains_WithCustomMessage(t *testing.T) {
+	schema := Schema{
+		"roles": Array().Required().Contains("admin").
+			Message("contains", "Must include admin role"),
+	}
+
+	err := Validate(DataObject{"roles": []any{"user", "guest"}}, schema)
+	if err == nil {
+		t.Error("Expected error for missing admin")
+	}
+	if err != nil && len(err.Errors["roles"]) > 0 {
+		if err.Errors["roles"][0] != "Must include admin role" {
+			t.Errorf("Expected custom message, got: %s", err.Errors["roles"][0])
+		}
+	}
+}
+
+func TestArrayValidator_DoesntContain_WithCustomMessage(t *testing.T) {
+	schema := Schema{
+		"tags": Array().Required().DoesntContain("spam").
+			Message("doesntContain", "Tags cannot include spam"),
+	}
+
+	err := Validate(DataObject{"tags": []any{"tech", "spam"}}, schema)
+	if err == nil {
+		t.Error("Expected error for containing spam")
+	}
+	if err != nil && len(err.Errors["tags"]) > 0 {
+		if err.Errors["tags"][0] != "Tags cannot include spam" {
+			t.Errorf("Expected custom message, got: %s", err.Errors["tags"][0])
+		}
+	}
+}
+
+func TestArrayValidator_All_Combined(t *testing.T) {
+	schema := Schema{
+		"items": Array().Required().
+			Min(2).Max(10).
+			Distinct().
+			Contains("required-item").
+			DoesntContain("forbidden-item").
+			Of(String().Min(3)),
+	}
+
+	tests := []struct {
+		name    string
+		value   []any
+		wantErr bool
+	}{
+		{"valid", []any{"required-item", "another", "valid"}, false},
+		{"too few items", []any{"required-item"}, true},
+		{"missing required", []any{"item1", "item2", "item3"}, true},
+		{"has forbidden", []any{"required-item", "forbidden-item"}, true},
+		{"has duplicate", []any{"required-item", "required-item"}, true},
+		{"element too short", []any{"required-item", "ab"}, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := Validate(DataObject{"items": tt.value}, schema)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("AllCombined(%v) got error = %v, wantErr = %v", tt.value, err, tt.wantErr)
+			}
+		})
+	}
+}

@@ -95,6 +95,20 @@ func (v *NumberValidator[T]) Max(n T) *NumberValidator[T] {
 	return v
 }
 
+// Between sets both minimum and maximum value (inclusive)
+func (v *NumberValidator[T]) Between(min, max T) *NumberValidator[T] {
+	v.min = min
+	v.minSet = true
+	v.max = max
+	v.maxSet = true
+	return v
+}
+
+// Step is an alias for MultipleOf (Zod naming)
+func (v *NumberValidator[T]) Step(n T) *NumberValidator[T] {
+	return v.MultipleOf(n)
+}
+
 // MinDigits sets minimum number of digits
 func (v *NumberValidator[T]) MinDigits(n int) *NumberValidator[T] {
 	v.minDigits = n
@@ -291,6 +305,20 @@ func (v *NumberValidator[T]) Validate(ctx *ValidationContext, value any) map[str
 	// Negative
 	if v.negative && num >= 0 {
 		errors[fieldPath] = append(errors[fieldPath], v.msg("negative", fmt.Sprintf("%s must be negative", fieldName)))
+	}
+
+	// MultipleOf / Step
+	if v.multipleSet {
+		// Convert to float64 for modulo calculation
+		numFloat := float64(num)
+		stepFloat := float64(v.multipleOf)
+		if stepFloat != 0 {
+			remainder := numFloat - stepFloat*float64(int64(numFloat/stepFloat))
+			// Use a small epsilon for float comparison
+			if remainder > 1e-9 && remainder < stepFloat-1e-9 {
+				errors[fieldPath] = append(errors[fieldPath], v.msg("multipleOf", fmt.Sprintf("%s must be a multiple of %v", fieldName, v.multipleOf)))
+			}
+		}
 	}
 
 	// Integer check

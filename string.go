@@ -1,11 +1,22 @@
 package valet
 
 import (
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
+	"net"
 	"net/url"
 	"regexp"
 	"strings"
+	"unicode"
 	"unicode/utf8"
+)
+
+// Pre-compiled regex patterns for better performance
+var (
+	macRegex       = regexp.MustCompile(`^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$`)
+	ulidRegex      = regexp.MustCompile(`^[0-9A-HJKMNP-TV-Z]{26}$`)
+	alphaDashRegex = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
 )
 
 // UrlOptions for URL validation
@@ -19,38 +30,56 @@ type StringTransformFunc func(string) string
 
 // StringValidator validates string values with fluent API
 type StringValidator struct {
-	required       bool
-	requiredIf     func(data DataObject) bool
-	requiredUnless func(data DataObject) bool
-	min            int
-	minSet         bool
-	max            int
-	maxSet         bool
-	email          bool
-	url            bool
-	urlOptions     *UrlOptions
-	alpha          bool
-	alphaNumeric   bool
-	regex          *regexp.Regexp
-	regexPattern   string
-	notRegex       *regexp.Regexp
-	in             []string
-	notIn          []string
-	startsWith     string
-	endsWith       string
-	contains       string
-	trim           bool
-	lowercase      bool
-	uppercase      bool
-	exists         *ExistsRule
-	unique         *UniqueRule
-	customFn       func(value string, lookup Lookup) error
-	messages       map[string]string
-	defaultValue   *string
-	nullable       bool
-	transforms     []StringTransformFunc
-	sameAs         string
-	differentFrom  string
+	required        bool
+	requiredIf      func(data DataObject) bool
+	requiredUnless  func(data DataObject) bool
+	min             int
+	minSet          bool
+	max             int
+	maxSet          bool
+	email           bool
+	url             bool
+	urlOptions      *UrlOptions
+	alpha           bool
+	alphaNumeric    bool
+	regex           *regexp.Regexp
+	regexPattern    string
+	notRegex        *regexp.Regexp
+	in              []string
+	notIn           []string
+	startsWith      string
+	endsWith        string
+	doesntStartWith []string
+	doesntEndWith   []string
+	contains        string
+	trim            bool
+	lowercase       bool
+	uppercase       bool
+	exists          *ExistsRule
+	unique          *UniqueRule
+	customFn        func(value string, lookup Lookup) error
+	messages        map[string]string
+	defaultValue    *string
+	nullable        bool
+	transforms      []StringTransformFunc
+	sameAs          string
+	differentFrom   string
+	// New format validations
+	uuid       bool
+	ip         bool
+	ipv4       bool
+	ipv6       bool
+	json       bool
+	hexColor   bool
+	ascii      bool
+	base64     bool
+	mac        bool
+	ulid       bool
+	alphaDash  bool
+	digitsLen  int
+	digitsSet  bool
+	includes   []string
+	catchValue *string
 }
 
 // String creates a new string validator
@@ -132,9 +161,27 @@ func (v *StringValidator) EndsWith(suffix string) *StringValidator {
 	return v
 }
 
+// DoesntStartWith validates string does NOT start with any of the prefixes
+func (v *StringValidator) DoesntStartWith(prefixes ...string) *StringValidator {
+	v.doesntStartWith = prefixes
+	return v
+}
+
+// DoesntEndWith validates string does NOT end with any of the suffixes
+func (v *StringValidator) DoesntEndWith(suffixes ...string) *StringValidator {
+	v.doesntEndWith = suffixes
+	return v
+}
+
 // Contains validates string contains substring
 func (v *StringValidator) Contains(substr string) *StringValidator {
 	v.contains = substr
+	return v
+}
+
+// Includes validates string contains all of the specified substrings
+func (v *StringValidator) Includes(substrs ...string) *StringValidator {
+	v.includes = substrs
 	return v
 }
 
@@ -147,6 +194,85 @@ func (v *StringValidator) Alpha() *StringValidator {
 // AlphaNumeric validates only letters and numbers
 func (v *StringValidator) AlphaNumeric() *StringValidator {
 	v.alphaNumeric = true
+	return v
+}
+
+// ASCII validates string contains only ASCII characters
+func (v *StringValidator) ASCII() *StringValidator {
+	v.ascii = true
+	return v
+}
+
+// UUID validates UUID format (v1-v5)
+func (v *StringValidator) UUID() *StringValidator {
+	v.uuid = true
+	return v
+}
+
+// IP validates IPv4 or IPv6 address
+func (v *StringValidator) IP() *StringValidator {
+	v.ip = true
+	return v
+}
+
+// IPv4 validates IPv4 address only
+func (v *StringValidator) IPv4() *StringValidator {
+	v.ipv4 = true
+	return v
+}
+
+// IPv6 validates IPv6 address only
+func (v *StringValidator) IPv6() *StringValidator {
+	v.ipv6 = true
+	return v
+}
+
+// JSON validates string is valid JSON
+func (v *StringValidator) JSON() *StringValidator {
+	v.json = true
+	return v
+}
+
+// HexColor validates hex color format (#RGB or #RRGGBB)
+func (v *StringValidator) HexColor() *StringValidator {
+	v.hexColor = true
+	return v
+}
+
+// Base64 validates string is valid base64 encoded
+func (v *StringValidator) Base64() *StringValidator {
+	v.base64 = true
+	return v
+}
+
+// MAC validates MAC address format
+func (v *StringValidator) MAC() *StringValidator {
+	v.mac = true
+	return v
+}
+
+// ULID validates ULID format (26 characters, Crockford base32)
+func (v *StringValidator) ULID() *StringValidator {
+	v.ulid = true
+	return v
+}
+
+// AlphaDash validates string contains only alphanumeric, dash, and underscore
+func (v *StringValidator) AlphaDash() *StringValidator {
+	v.alphaDash = true
+	return v
+}
+
+// Digits validates string is numeric with exact length
+func (v *StringValidator) Digits(length int) *StringValidator {
+	v.digitsLen = length
+	v.digitsSet = true
+	return v
+}
+
+// Catch sets a fallback value to use if validation fails
+func (v *StringValidator) Catch(value string) *StringValidator {
+	v.catchValue = &value
 	return v
 }
 
@@ -397,6 +523,89 @@ func (v *StringValidator) Validate(ctx *ValidationContext, value any) map[string
 		errors[fieldPath] = append(errors[fieldPath], v.msg("notIn", fmt.Sprintf("%s must not be one of: %s", fieldName, strings.Join(v.notIn, ", "))))
 	}
 
+	// DoesntStartWith (array of prefixes)
+	for _, prefix := range v.doesntStartWith {
+		if strings.HasPrefix(str, prefix) {
+			errors[fieldPath] = append(errors[fieldPath], v.msg("doesntStartWith", fmt.Sprintf("%s must not start with %s", fieldName, prefix)))
+			break
+		}
+	}
+
+	// DoesntEndWith (array of suffixes)
+	for _, suffix := range v.doesntEndWith {
+		if strings.HasSuffix(str, suffix) {
+			errors[fieldPath] = append(errors[fieldPath], v.msg("doesntEndWith", fmt.Sprintf("%s must not end with %s", fieldName, suffix)))
+			break
+		}
+	}
+
+	// Includes (must contain all substrings)
+	for _, substr := range v.includes {
+		if !strings.Contains(str, substr) {
+			errors[fieldPath] = append(errors[fieldPath], v.msg("includes", fmt.Sprintf("%s must contain %s", fieldName, substr)))
+		}
+	}
+
+	// UUID
+	if v.uuid && !isValidUUID(str) {
+		errors[fieldPath] = append(errors[fieldPath], v.msg("uuid", fmt.Sprintf("%s must be a valid UUID", fieldName)))
+	}
+
+	// IP (v4 or v6)
+	if v.ip && !isValidIP(str) {
+		errors[fieldPath] = append(errors[fieldPath], v.msg("ip", fmt.Sprintf("%s must be a valid IP address", fieldName)))
+	}
+
+	// IPv4 only
+	if v.ipv4 && !isValidIPv4(str) {
+		errors[fieldPath] = append(errors[fieldPath], v.msg("ipv4", fmt.Sprintf("%s must be a valid IPv4 address", fieldName)))
+	}
+
+	// IPv6 only
+	if v.ipv6 && !isValidIPv6(str) {
+		errors[fieldPath] = append(errors[fieldPath], v.msg("ipv6", fmt.Sprintf("%s must be a valid IPv6 address", fieldName)))
+	}
+
+	// JSON
+	if v.json && !isValidJSON(str) {
+		errors[fieldPath] = append(errors[fieldPath], v.msg("json", fmt.Sprintf("%s must be valid JSON", fieldName)))
+	}
+
+	// HexColor
+	if v.hexColor && !isValidHexColor(str) {
+		errors[fieldPath] = append(errors[fieldPath], v.msg("hexColor", fmt.Sprintf("%s must be a valid hex color", fieldName)))
+	}
+
+	// ASCII
+	if v.ascii && !isASCII(str) {
+		errors[fieldPath] = append(errors[fieldPath], v.msg("ascii", fmt.Sprintf("%s must contain only ASCII characters", fieldName)))
+	}
+
+	// Base64
+	if v.base64 && !isValidBase64(str) {
+		errors[fieldPath] = append(errors[fieldPath], v.msg("base64", fmt.Sprintf("%s must be valid base64", fieldName)))
+	}
+
+	// MAC address
+	if v.mac && !isValidMAC(str) {
+		errors[fieldPath] = append(errors[fieldPath], v.msg("mac", fmt.Sprintf("%s must be a valid MAC address", fieldName)))
+	}
+
+	// ULID
+	if v.ulid && !isValidULID(str) {
+		errors[fieldPath] = append(errors[fieldPath], v.msg("ulid", fmt.Sprintf("%s must be a valid ULID", fieldName)))
+	}
+
+	// AlphaDash (letters, numbers, dashes, underscores)
+	if v.alphaDash && !isAlphaDash(str) {
+		errors[fieldPath] = append(errors[fieldPath], v.msg("alphaDash", fmt.Sprintf("%s must contain only letters, numbers, dashes, and underscores", fieldName)))
+	}
+
+	// Digits (exact length numeric string)
+	if v.digitsSet && !isDigits(str, v.digitsLen) {
+		errors[fieldPath] = append(errors[fieldPath], v.msg("digits", fmt.Sprintf("%s must be exactly %d digits", fieldName, v.digitsLen)))
+	}
+
 	// SameAs - cross-field equality check
 	if v.sameAs != "" {
 		otherValue := lookupPath(ctx.RootData, v.sameAs)
@@ -481,6 +690,8 @@ func (v *StringValidator) msg(rule, defaultMsg string) string {
 var emailRegex = regexp.MustCompile(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`)
 var alphaRegex = regexp.MustCompile(`^[a-zA-Z]+$`)
 var alphaNumericRegex = regexp.MustCompile(`^[a-zA-Z0-9]+$`)
+var uuidRegex = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$`)
+var hexColorRegex = regexp.MustCompile(`^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$`)
 
 func isValidEmail(s string) bool {
 	return emailRegex.MatchString(s)
@@ -497,6 +708,77 @@ func isAlpha(s string) bool {
 
 func isAlphaNumeric(s string) bool {
 	return alphaNumericRegex.MatchString(s)
+}
+
+func isValidUUID(s string) bool {
+	return uuidRegex.MatchString(s)
+}
+
+func isValidIP(s string) bool {
+	return net.ParseIP(s) != nil
+}
+
+func isValidIPv4(s string) bool {
+	ip := net.ParseIP(s)
+	return ip != nil && ip.To4() != nil
+}
+
+func isValidIPv6(s string) bool {
+	ip := net.ParseIP(s)
+	return ip != nil && ip.To4() == nil
+}
+
+func isValidJSON(s string) bool {
+	var js json.RawMessage
+	return json.Unmarshal([]byte(s), &js) == nil
+}
+
+func isValidHexColor(s string) bool {
+	return hexColorRegex.MatchString(s)
+}
+
+func isASCII(s string) bool {
+	for _, r := range s {
+		if r > unicode.MaxASCII {
+			return false
+		}
+	}
+	return true
+}
+
+func isValidBase64(s string) bool {
+	_, err := base64.StdEncoding.DecodeString(s)
+	return err == nil
+}
+
+func isValidMAC(s string) bool {
+	// MAC address formats: XX:XX:XX:XX:XX:XX or XX-XX-XX-XX-XX-XX
+	return macRegex.MatchString(s)
+}
+
+func isValidULID(s string) bool {
+	// ULID: 26 characters, Crockford base32 (excludes I, L, O, U)
+	if len(s) != 26 {
+		return false
+	}
+	return ulidRegex.MatchString(strings.ToUpper(s))
+}
+
+func isAlphaDash(s string) bool {
+	// Only letters, numbers, dashes, and underscores
+	return alphaDashRegex.MatchString(s)
+}
+
+func isDigits(s string, length int) bool {
+	if len(s) != length {
+		return false
+	}
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 func contains(slice []string, item string) bool {

@@ -1728,3 +1728,502 @@ func BenchmarkComplexValidation(b *testing.B) {
 		Validate(data, schema)
 	}
 }
+
+// ============================================================================
+// INTEGRATION TESTS FOR NEW FEATURES
+// ============================================================================
+
+func TestIntegration_NewStringValidators(t *testing.T) {
+	t.Run("UUID validation", func(t *testing.T) {
+		schema := Schema{
+			"id": String().Required().UUID(),
+		}
+
+		err := Validate(DataObject{"id": "550e8400-e29b-41d4-a716-446655440000"}, schema)
+		if err != nil {
+			t.Errorf("Expected valid UUID, got error: %v", err.Errors)
+		}
+
+		err = Validate(DataObject{"id": "invalid-uuid"}, schema)
+		if err == nil {
+			t.Error("Expected error for invalid UUID")
+		}
+	})
+
+	t.Run("IP address validation", func(t *testing.T) {
+		schema := Schema{
+			"ipv4": String().Required().IPv4(),
+			"ipv6": String().Required().IPv6(),
+			"ip":   String().Required().IP(),
+		}
+
+		err := Validate(DataObject{
+			"ipv4": "192.168.1.1",
+			"ipv6": "::1",
+			"ip":   "10.0.0.1",
+		}, schema)
+		if err != nil {
+			t.Errorf("Expected valid IPs, got error: %v", err.Errors)
+		}
+	})
+
+	t.Run("JSON validation", func(t *testing.T) {
+		schema := Schema{
+			"config": String().Required().JSON(),
+		}
+
+		err := Validate(DataObject{"config": `{"key": "value"}`}, schema)
+		if err != nil {
+			t.Errorf("Expected valid JSON, got error: %v", err.Errors)
+		}
+
+		err = Validate(DataObject{"config": "not json"}, schema)
+		if err == nil {
+			t.Error("Expected error for invalid JSON")
+		}
+	})
+
+	t.Run("HexColor validation", func(t *testing.T) {
+		schema := Schema{
+			"color": String().Required().HexColor(),
+		}
+
+		err := Validate(DataObject{"color": "#ff5733"}, schema)
+		if err != nil {
+			t.Errorf("Expected valid hex color, got error: %v", err.Errors)
+		}
+
+		err = Validate(DataObject{"color": "red"}, schema)
+		if err == nil {
+			t.Error("Expected error for invalid hex color")
+		}
+	})
+
+	t.Run("DoesntStartWith and DoesntEndWith", func(t *testing.T) {
+		schema := Schema{
+			"username": String().Required().DoesntStartWith("admin", "root"),
+			"filename": String().Required().DoesntEndWith(".exe", ".bat"),
+		}
+
+		err := Validate(DataObject{
+			"username": "john_doe",
+			"filename": "document.pdf",
+		}, schema)
+		if err != nil {
+			t.Errorf("Expected valid values, got error: %v", err.Errors)
+		}
+
+		err = Validate(DataObject{
+			"username": "admin_user",
+			"filename": "document.pdf",
+		}, schema)
+		if err == nil {
+			t.Error("Expected error for username starting with admin")
+		}
+	})
+
+	t.Run("Includes validation", func(t *testing.T) {
+		schema := Schema{
+			"bio": String().Required().Includes("developer", "engineer"),
+		}
+
+		err := Validate(DataObject{"bio": "I am a software developer and engineer"}, schema)
+		if err != nil {
+			t.Errorf("Expected valid bio, got error: %v", err.Errors)
+		}
+
+		err = Validate(DataObject{"bio": "I am a designer"}, schema)
+		if err == nil {
+			t.Error("Expected error for bio missing required words")
+		}
+	})
+
+	t.Run("MAC address validation", func(t *testing.T) {
+		schema := Schema{
+			"mac": String().Required().MAC(),
+		}
+
+		err := Validate(DataObject{"mac": "00:1A:2B:3C:4D:5E"}, schema)
+		if err != nil {
+			t.Errorf("Expected valid MAC, got error: %v", err.Errors)
+		}
+	})
+
+	t.Run("ULID validation", func(t *testing.T) {
+		schema := Schema{
+			"id": String().Required().ULID(),
+		}
+
+		err := Validate(DataObject{"id": "01ARZ3NDEKTSV4RRFFQ69G5FAV"}, schema)
+		if err != nil {
+			t.Errorf("Expected valid ULID, got error: %v", err.Errors)
+		}
+	})
+
+	t.Run("AlphaDash validation", func(t *testing.T) {
+		schema := Schema{
+			"slug": String().Required().AlphaDash(),
+		}
+
+		err := Validate(DataObject{"slug": "hello-world_123"}, schema)
+		if err != nil {
+			t.Errorf("Expected valid slug, got error: %v", err.Errors)
+		}
+
+		err = Validate(DataObject{"slug": "hello world"}, schema)
+		if err == nil {
+			t.Error("Expected error for slug with space")
+		}
+	})
+
+	t.Run("Digits validation", func(t *testing.T) {
+		schema := Schema{
+			"otp": String().Required().Digits(6),
+		}
+
+		err := Validate(DataObject{"otp": "123456"}, schema)
+		if err != nil {
+			t.Errorf("Expected valid OTP, got error: %v", err.Errors)
+		}
+
+		err = Validate(DataObject{"otp": "12345"}, schema)
+		if err == nil {
+			t.Error("Expected error for OTP with wrong length")
+		}
+	})
+
+	t.Run("ASCII validation", func(t *testing.T) {
+		schema := Schema{
+			"text": String().Required().ASCII(),
+		}
+
+		err := Validate(DataObject{"text": "Hello World 123!"}, schema)
+		if err != nil {
+			t.Errorf("Expected valid ASCII, got error: %v", err.Errors)
+		}
+
+		err = Validate(DataObject{"text": "Hello 世界"}, schema)
+		if err == nil {
+			t.Error("Expected error for non-ASCII characters")
+		}
+	})
+
+	t.Run("Base64 validation", func(t *testing.T) {
+		schema := Schema{
+			"data": String().Required().Base64(),
+		}
+
+		err := Validate(DataObject{"data": "SGVsbG8gV29ybGQ="}, schema)
+		if err != nil {
+			t.Errorf("Expected valid Base64, got error: %v", err.Errors)
+		}
+	})
+}
+
+func TestIntegration_NewNumberValidators(t *testing.T) {
+	t.Run("Between validation", func(t *testing.T) {
+		schema := Schema{
+			"score": Float().Required().Between(0, 100),
+		}
+
+		err := Validate(DataObject{"score": float64(50)}, schema)
+		if err != nil {
+			t.Errorf("Expected valid score, got error: %v", err.Errors)
+		}
+
+		err = Validate(DataObject{"score": float64(150)}, schema)
+		if err == nil {
+			t.Error("Expected error for score out of range")
+		}
+	})
+
+	t.Run("Step validation", func(t *testing.T) {
+		schema := Schema{
+			"quantity": Float().Required().Step(5),
+		}
+
+		err := Validate(DataObject{"quantity": float64(15)}, schema)
+		if err != nil {
+			t.Errorf("Expected valid quantity, got error: %v", err.Errors)
+		}
+
+		err = Validate(DataObject{"quantity": float64(17)}, schema)
+		if err == nil {
+			t.Error("Expected error for quantity not a multiple of 5")
+		}
+	})
+}
+
+func TestIntegration_NewArrayValidators(t *testing.T) {
+	t.Run("Contains validation", func(t *testing.T) {
+		schema := Schema{
+			"roles": Array().Required().Contains("admin"),
+		}
+
+		err := Validate(DataObject{"roles": []any{"user", "admin"}}, schema)
+		if err != nil {
+			t.Errorf("Expected valid roles, got error: %v", err.Errors)
+		}
+
+		err = Validate(DataObject{"roles": []any{"user", "guest"}}, schema)
+		if err == nil {
+			t.Error("Expected error for missing admin role")
+		}
+	})
+
+	t.Run("DoesntContain validation", func(t *testing.T) {
+		schema := Schema{
+			"tags": Array().Required().DoesntContain("spam", "nsfw"),
+		}
+
+		err := Validate(DataObject{"tags": []any{"tech", "news"}}, schema)
+		if err != nil {
+			t.Errorf("Expected valid tags, got error: %v", err.Errors)
+		}
+
+		err = Validate(DataObject{"tags": []any{"tech", "spam"}}, schema)
+		if err == nil {
+			t.Error("Expected error for containing spam")
+		}
+	})
+
+	t.Run("Distinct validation", func(t *testing.T) {
+		schema := Schema{
+			"items": Array().Required().Distinct(),
+		}
+
+		err := Validate(DataObject{"items": []any{"a", "b", "c"}}, schema)
+		if err != nil {
+			t.Errorf("Expected valid items, got error: %v", err.Errors)
+		}
+
+		err = Validate(DataObject{"items": []any{"a", "b", "a"}}, schema)
+		if err == nil {
+			t.Error("Expected error for duplicate items")
+		}
+	})
+}
+
+func TestIntegration_ObjectUtilities(t *testing.T) {
+	t.Run("Pick utility", func(t *testing.T) {
+		userSchema := Object().Shape(Schema{
+			"name":     String().Required(),
+			"email":    String().Required().Email(),
+			"password": String().Required().Min(8),
+		})
+
+		// Pick only name and email
+		publicSchema := Schema{"user": userSchema.Pick("name", "email")}
+
+		err := Validate(DataObject{
+			"user": map[string]any{
+				"name":  "John",
+				"email": "john@example.com",
+			},
+		}, publicSchema)
+		if err != nil {
+			t.Errorf("Expected valid with picked fields, got error: %v", err.Errors)
+		}
+	})
+
+	t.Run("Omit utility", func(t *testing.T) {
+		userSchema := Object().Shape(Schema{
+			"name":     String().Required(),
+			"email":    String().Required().Email(),
+			"password": String().Required().Min(8),
+		})
+
+		// Omit password for public view
+		publicSchema := Schema{"user": userSchema.Omit("password")}
+
+		err := Validate(DataObject{
+			"user": map[string]any{
+				"name":  "John",
+				"email": "john@example.com",
+			},
+		}, publicSchema)
+		if err != nil {
+			t.Errorf("Expected valid without password, got error: %v", err.Errors)
+		}
+	})
+
+	t.Run("Partial utility", func(t *testing.T) {
+		userSchema := Object().Shape(Schema{
+			"name":  String().Required(),
+			"email": String().Required().Email(),
+		})
+
+		// Make all fields optional for PATCH
+		patchSchema := Schema{"user": userSchema.Partial()}
+
+		err := Validate(DataObject{
+			"user": map[string]any{
+				"name": "John",
+			},
+		}, patchSchema)
+		if err != nil {
+			t.Errorf("Expected valid partial update, got error: %v", err.Errors)
+		}
+	})
+
+	t.Run("Merge utility", func(t *testing.T) {
+		baseSchema := Object().Shape(Schema{
+			"name": String().Required(),
+		})
+
+		extendedSchema := Object().Shape(Schema{
+			"email": String().Required().Email(),
+		})
+
+		mergedSchema := Schema{"user": baseSchema.Merge(extendedSchema)}
+
+		err := Validate(DataObject{
+			"user": map[string]any{
+				"name":  "John",
+				"email": "john@example.com",
+			},
+		}, mergedSchema)
+		if err != nil {
+			t.Errorf("Expected valid merged schema, got error: %v", err.Errors)
+		}
+	})
+}
+
+func TestIntegration_SchemaHelpers(t *testing.T) {
+	t.Run("Enum validation", func(t *testing.T) {
+		schema := Schema{
+			"status": Enum("pending", "active", "completed").Required(),
+		}
+
+		err := Validate(DataObject{"status": "active"}, schema)
+		if err != nil {
+			t.Errorf("Expected valid status, got error: %v", err.Errors)
+		}
+
+		err = Validate(DataObject{"status": "unknown"}, schema)
+		if err == nil {
+			t.Error("Expected error for invalid status")
+		}
+	})
+
+	t.Run("EnumInt validation", func(t *testing.T) {
+		schema := Schema{
+			"priority": EnumInt(1, 2, 3, 4, 5).Required(),
+		}
+
+		err := Validate(DataObject{"priority": float64(3)}, schema)
+		if err != nil {
+			t.Errorf("Expected valid priority, got error: %v", err.Errors)
+		}
+
+		err = Validate(DataObject{"priority": float64(10)}, schema)
+		if err == nil {
+			t.Error("Expected error for invalid priority")
+		}
+	})
+
+	t.Run("Literal validation", func(t *testing.T) {
+		schema := Schema{
+			"type": Literal("config").Required(),
+		}
+
+		err := Validate(DataObject{"type": "config"}, schema)
+		if err != nil {
+			t.Errorf("Expected valid type, got error: %v", err.Errors)
+		}
+
+		err = Validate(DataObject{"type": "other"}, schema)
+		if err == nil {
+			t.Error("Expected error for wrong literal")
+		}
+	})
+
+	t.Run("Union validation", func(t *testing.T) {
+		schema := Schema{
+			"id": Union(String().UUID(), Int().Positive()).Required(),
+		}
+
+		err := Validate(DataObject{"id": "550e8400-e29b-41d4-a716-446655440000"}, schema)
+		if err != nil {
+			t.Errorf("Expected valid UUID id, got error: %v", err.Errors)
+		}
+
+		err = Validate(DataObject{"id": float64(123)}, schema)
+		if err != nil {
+			t.Errorf("Expected valid int id, got error: %v", err.Errors)
+		}
+
+		err = Validate(DataObject{"id": "not-a-uuid"}, schema)
+		if err == nil {
+			t.Error("Expected error for invalid id")
+		}
+	})
+
+	t.Run("Optional validation", func(t *testing.T) {
+		schema := Schema{
+			"name":     String().Required(),
+			"nickname": Optional(String().Min(2).Max(20)),
+		}
+
+		err := Validate(DataObject{"name": "John"}, schema)
+		if err != nil {
+			t.Errorf("Expected valid without optional, got error: %v", err.Errors)
+		}
+
+		err = Validate(DataObject{"name": "John", "nickname": "Johnny"}, schema)
+		if err != nil {
+			t.Errorf("Expected valid with optional, got error: %v", err.Errors)
+		}
+
+		err = Validate(DataObject{"name": "John", "nickname": "X"}, schema)
+		if err == nil {
+			t.Error("Expected error for invalid optional value")
+		}
+	})
+}
+
+func TestIntegration_ComplexSchema(t *testing.T) {
+	// Test a complex real-world schema using new features
+	schema := Schema{
+		"id":     Union(String().UUID(), Int().Positive()).Required(),
+		"status": Enum("draft", "published", "archived").Required(),
+		"type":   Literal("article"),
+		"author": Object().Required().Shape(Schema{
+			"name":  String().Required().Min(2).AlphaDash(),
+			"email": String().Required().Email(),
+			"role":  Enum("admin", "editor", "writer").Required(),
+		}),
+		"metadata": Optional(Object().Shape(Schema{
+			"color":    String().HexColor(),
+			"priority": EnumInt(1, 2, 3, 4, 5),
+		})),
+		"tags":       Array().Required().Min(1).Distinct().DoesntContain("spam"),
+		"config":     Optional(String().JSON()),
+		"score":      Float().Between(0, 100),
+		"ip_address": Optional(String().IP()),
+	}
+
+	validData := DataObject{
+		"id":     "550e8400-e29b-41d4-a716-446655440000",
+		"status": "published",
+		"type":   "article",
+		"author": map[string]any{
+			"name":  "john_doe",
+			"email": "john@example.com",
+			"role":  "editor",
+		},
+		"metadata": map[string]any{
+			"color":    "#ff5733",
+			"priority": float64(3),
+		},
+		"tags":       []any{"tech", "news"},
+		"config":     `{"key": "value"}`,
+		"score":      float64(85),
+		"ip_address": "192.168.1.1",
+	}
+
+	err := Validate(validData, schema)
+	if err != nil {
+		t.Errorf("Expected valid complex data, got error: %v", err.Errors)
+	}
+}

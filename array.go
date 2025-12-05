@@ -2,6 +2,7 @@ package valet
 
 import (
 	"fmt"
+	"reflect"
 	"sync"
 )
 
@@ -22,7 +23,9 @@ type ArrayValidator struct {
 	customFn       func(value []any, lookup Lookup) error
 	messages       map[string]string
 	nullable       bool
-	concurrent     int // Number of goroutines for parallel validation (0 = sequential)
+	concurrent     int   // Number of goroutines for parallel validation (0 = sequential)
+	contains       []any // Values that must be present in the array
+	doesntContain  []any // Values that must not be present in the array
 }
 
 // Array creates a new array validator
@@ -80,6 +83,23 @@ func (v *ArrayValidator) Of(validator Validator) *ArrayValidator {
 // Unique requires all elements to be unique
 func (v *ArrayValidator) Unique() *ArrayValidator {
 	v.unique = true
+	return v
+}
+
+// Distinct is an alias for Unique (Laravel naming)
+func (v *ArrayValidator) Distinct() *ArrayValidator {
+	return v.Unique()
+}
+
+// Contains requires array to contain the specified values
+func (v *ArrayValidator) Contains(values ...any) *ArrayValidator {
+	v.contains = values
+	return v
+}
+
+// DoesntContain requires array to NOT contain the specified values
+func (v *ArrayValidator) DoesntContain(values ...any) *ArrayValidator {
+	v.doesntContain = values
 	return v
 }
 
@@ -181,6 +201,34 @@ func (v *ArrayValidator) Validate(ctx *ValidationContext, value any) map[string]
 				errors[elementPath] = append(errors[elementPath], v.msg("unique", fmt.Sprintf("%s[%d] is a duplicate", fieldName, i)))
 			}
 			seen[item] = true
+		}
+	}
+
+	// Contains check - array must contain all specified values
+	if len(v.contains) > 0 {
+		for _, required := range v.contains {
+			found := false
+			for _, item := range arr {
+				if equalValues(item, required) {
+					found = true
+					break
+				}
+			}
+			if !found {
+				errors[fieldPath] = append(errors[fieldPath], v.msg("contains", fmt.Sprintf("%s must contain %v", fieldName, required)))
+			}
+		}
+	}
+
+	// DoesntContain check - array must not contain any of the specified values
+	if len(v.doesntContain) > 0 {
+		for _, forbidden := range v.doesntContain {
+			for i, item := range arr {
+				if equalValues(item, forbidden) {
+					elementPath := fmt.Sprintf("%s.%d", fieldPath, i)
+					errors[elementPath] = append(errors[elementPath], v.msg("doesntContain", fmt.Sprintf("%s must not contain %v", fieldName, forbidden)))
+				}
+			}
 		}
 	}
 
@@ -290,4 +338,9 @@ func (v *ArrayValidator) msg(rule, defaultMsg string) string {
 		return msg
 	}
 	return defaultMsg
+}
+
+// equalValues compares two values for equality using reflect.DeepEqual
+func equalValues(a, b any) bool {
+	return reflect.DeepEqual(a, b)
 }

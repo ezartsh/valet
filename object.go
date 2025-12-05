@@ -66,6 +66,95 @@ func (v *ObjectValidator) Passthrough() *ObjectValidator {
 	return v
 }
 
+// Pick creates a new validator with only the specified fields
+func (v *ObjectValidator) Pick(fields ...string) *ObjectValidator {
+	newValidator := &ObjectValidator{
+		required:    v.required,
+		requiredIf:  v.requiredIf,
+		strict:      v.strict,
+		passthrough: v.passthrough,
+		customFn:    v.customFn,
+		messages:    make(map[string]string),
+		nullable:    v.nullable,
+		schema:      make(Schema),
+	}
+
+	// Copy only specified fields
+	for _, field := range fields {
+		if val, exists := v.schema[field]; exists {
+			newValidator.schema[field] = val
+		}
+	}
+
+	// Copy messages
+	for k, val := range v.messages {
+		newValidator.messages[k] = val
+	}
+
+	return newValidator
+}
+
+// Omit creates a new validator excluding the specified fields
+func (v *ObjectValidator) Omit(fields ...string) *ObjectValidator {
+	newValidator := &ObjectValidator{
+		required:    v.required,
+		requiredIf:  v.requiredIf,
+		strict:      v.strict,
+		passthrough: v.passthrough,
+		customFn:    v.customFn,
+		messages:    make(map[string]string),
+		nullable:    v.nullable,
+		schema:      make(Schema),
+	}
+
+	// Create a set of fields to omit
+	omitSet := make(map[string]bool)
+	for _, field := range fields {
+		omitSet[field] = true
+	}
+
+	// Copy all fields except omitted ones
+	for k, val := range v.schema {
+		if !omitSet[k] {
+			newValidator.schema[k] = val
+		}
+	}
+
+	// Copy messages
+	for k, val := range v.messages {
+		newValidator.messages[k] = val
+	}
+
+	return newValidator
+}
+
+// Partial creates a new validator where all fields are optional (not required)
+// Note: This creates new validators that wrap existing ones without the Required flag
+func (v *ObjectValidator) Partial() *ObjectValidator {
+	newValidator := &ObjectValidator{
+		required:    false, // Partial means object itself is not required
+		requiredIf:  nil,
+		strict:      v.strict,
+		passthrough: v.passthrough,
+		customFn:    v.customFn,
+		messages:    make(map[string]string),
+		nullable:    v.nullable,
+		schema:      make(Schema),
+	}
+
+	// Copy schema with optional wrappers
+	for k, val := range v.schema {
+		newValidator.schema[k] = &OptionalValidator{inner: val}
+	}
+
+	// Copy messages
+	for k, val := range v.messages {
+		newValidator.messages[k] = val
+	}
+
+	return newValidator
+}
+
 // Extend creates a new validator with additional schema fields
 func (v *ObjectValidator) Extend(additional Schema) *ObjectValidator {
 	newValidator := &ObjectValidator{
@@ -91,6 +180,42 @@ func (v *ObjectValidator) Extend(additional Schema) *ObjectValidator {
 
 	// Copy messages
 	for k, val := range v.messages {
+		newValidator.messages[k] = val
+	}
+
+	return newValidator
+}
+
+// Merge combines this validator with another ObjectValidator
+func (v *ObjectValidator) Merge(other *ObjectValidator) *ObjectValidator {
+	newValidator := &ObjectValidator{
+		required:    v.required || other.required,
+		requiredIf:  v.requiredIf,
+		strict:      v.strict || other.strict,
+		passthrough: v.passthrough && other.passthrough,
+		customFn:    v.customFn,
+		messages:    make(map[string]string),
+		nullable:    v.nullable && other.nullable,
+		schema:      make(Schema),
+	}
+
+	// Copy schema from this validator
+	for k, val := range v.schema {
+		newValidator.schema[k] = val
+	}
+
+	// Merge schema from other validator (overwrites duplicates)
+	for k, val := range other.schema {
+		newValidator.schema[k] = val
+	}
+
+	// Copy messages from this validator
+	for k, val := range v.messages {
+		newValidator.messages[k] = val
+	}
+
+	// Merge messages from other validator
+	for k, val := range other.messages {
 		newValidator.messages[k] = val
 	}
 
