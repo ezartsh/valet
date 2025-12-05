@@ -109,8 +109,9 @@ func (v *ArrayValidator) Nonempty() *ArrayValidator {
 }
 
 // Validate implements Validator interface
-func (v *ArrayValidator) Validate(ctx *ValidationContext, value any) []string {
-	var errors []string
+func (v *ArrayValidator) Validate(ctx *ValidationContext, value any) map[string][]string {
+	errors := make(map[string][]string)
+	fieldPath := ctx.FullPath()
 	fieldName := ctx.Path[len(ctx.Path)-1]
 
 	// Handle nil
@@ -119,15 +120,15 @@ func (v *ArrayValidator) Validate(ctx *ValidationContext, value any) []string {
 			return nil
 		}
 		if v.required {
-			errors = append(errors, v.msg("required", fmt.Sprintf("%s is required", fieldName)))
+			errors[fieldPath] = append(errors[fieldPath], v.msg("required", fmt.Sprintf("%s is required", fieldName)))
 			return errors
 		}
 		if v.requiredIf != nil && v.requiredIf(ctx.RootData) {
-			errors = append(errors, v.msg("required", fmt.Sprintf("%s is required", fieldName)))
+			errors[fieldPath] = append(errors[fieldPath], v.msg("required", fmt.Sprintf("%s is required", fieldName)))
 			return errors
 		}
 		if v.requiredUnless != nil && !v.requiredUnless(ctx.RootData) {
-			errors = append(errors, v.msg("required", fmt.Sprintf("%s is required", fieldName)))
+			errors[fieldPath] = append(errors[fieldPath], v.msg("required", fmt.Sprintf("%s is required", fieldName)))
 			return errors
 		}
 		return nil
@@ -136,7 +137,7 @@ func (v *ArrayValidator) Validate(ctx *ValidationContext, value any) []string {
 	// Type check
 	arr, ok := value.([]any)
 	if !ok {
-		errors = append(errors, v.msg("type", fmt.Sprintf("%s must be an array", fieldName)))
+		errors[fieldPath] = append(errors[fieldPath], v.msg("type", fmt.Sprintf("%s must be an array", fieldName)))
 		return errors
 	}
 
@@ -144,17 +145,17 @@ func (v *ArrayValidator) Validate(ctx *ValidationContext, value any) []string {
 
 	// Length check
 	if v.lengthSet && length != v.length {
-		errors = append(errors, v.msg("length", fmt.Sprintf("%s must have exactly %d elements", fieldName, v.length)))
+		errors[fieldPath] = append(errors[fieldPath], v.msg("length", fmt.Sprintf("%s must have exactly %d elements", fieldName, v.length)))
 	}
 
 	// Min check
 	if v.minSet && length < v.min {
-		errors = append(errors, v.msg("min", fmt.Sprintf("%s must have at least %d elements", fieldName, v.min)))
+		errors[fieldPath] = append(errors[fieldPath], v.msg("min", fmt.Sprintf("%s must have at least %d elements", fieldName, v.min)))
 	}
 
 	// Max check
 	if v.maxSet && length > v.max {
-		errors = append(errors, v.msg("max", fmt.Sprintf("%s must have at most %d elements", fieldName, v.max)))
+		errors[fieldPath] = append(errors[fieldPath], v.msg("max", fmt.Sprintf("%s must have at most %d elements", fieldName, v.max)))
 	}
 
 	// Unique check
@@ -162,7 +163,8 @@ func (v *ArrayValidator) Validate(ctx *ValidationContext, value any) []string {
 		seen := make(map[any]bool)
 		for i, item := range arr {
 			if seen[item] {
-				errors = append(errors, v.msg("unique", fmt.Sprintf("%s[%d] is a duplicate", fieldName, i)))
+				elementPath := fmt.Sprintf("%s.%d", fieldPath, i)
+				errors[elementPath] = append(errors[elementPath], v.msg("unique", fmt.Sprintf("%s[%d] is a duplicate", fieldName, i)))
 			}
 			seen[item] = true
 		}
@@ -178,7 +180,10 @@ func (v *ArrayValidator) Validate(ctx *ValidationContext, value any) []string {
 				Options:  ctx.Options,
 			}
 			childErrors := v.element.Validate(childCtx, item)
-			errors = append(errors, childErrors...)
+			// Merge child errors
+			for path, errs := range childErrors {
+				errors[path] = append(errors[path], errs...)
+			}
 		}
 	}
 
@@ -188,10 +193,13 @@ func (v *ArrayValidator) Validate(ctx *ValidationContext, value any) []string {
 			return lookupPath(ctx.RootData, path)
 		}
 		if err := v.customFn(arr, lookup); err != nil {
-			errors = append(errors, v.msg("custom", err.Error()))
+			errors[fieldPath] = append(errors[fieldPath], v.msg("custom", err.Error()))
 		}
 	}
 
+	if len(errors) == 0 {
+		return nil
+	}
 	return errors
 }
 

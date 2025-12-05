@@ -116,8 +116,9 @@ func (v *ObjectValidator) Nullable() *ObjectValidator {
 }
 
 // Validate implements Validator interface
-func (v *ObjectValidator) Validate(ctx *ValidationContext, value any) []string {
-	var errors []string
+func (v *ObjectValidator) Validate(ctx *ValidationContext, value any) map[string][]string {
+	errors := make(map[string][]string)
+	fieldPath := ctx.FullPath()
 	fieldName := ""
 	if len(ctx.Path) > 0 {
 		fieldName = ctx.Path[len(ctx.Path)-1]
@@ -129,15 +130,15 @@ func (v *ObjectValidator) Validate(ctx *ValidationContext, value any) []string {
 			return nil
 		}
 		if v.required {
-			errors = append(errors, v.msg("required", fmt.Sprintf("%s is required", fieldName)))
+			errors[fieldPath] = append(errors[fieldPath], v.msg("required", fmt.Sprintf("%s is required", fieldName)))
 			return errors
 		}
 		if v.requiredIf != nil && v.requiredIf(ctx.RootData) {
-			errors = append(errors, v.msg("required", fmt.Sprintf("%s is required", fieldName)))
+			errors[fieldPath] = append(errors[fieldPath], v.msg("required", fmt.Sprintf("%s is required", fieldName)))
 			return errors
 		}
 		if v.requiredUnless != nil && !v.requiredUnless(ctx.RootData) {
-			errors = append(errors, v.msg("required", fmt.Sprintf("%s is required", fieldName)))
+			errors[fieldPath] = append(errors[fieldPath], v.msg("required", fmt.Sprintf("%s is required", fieldName)))
 			return errors
 		}
 		return nil
@@ -146,7 +147,7 @@ func (v *ObjectValidator) Validate(ctx *ValidationContext, value any) []string {
 	// Type check
 	obj, ok := value.(map[string]any)
 	if !ok {
-		errors = append(errors, v.msg("type", fmt.Sprintf("%s must be an object", fieldName)))
+		errors[fieldPath] = append(errors[fieldPath], v.msg("type", fmt.Sprintf("%s must be an object", fieldName)))
 		return errors
 	}
 
@@ -154,7 +155,7 @@ func (v *ObjectValidator) Validate(ctx *ValidationContext, value any) []string {
 	if v.strict && v.schema != nil {
 		for key := range obj {
 			if _, exists := v.schema[key]; !exists {
-				errors = append(errors, v.msg("strict", fmt.Sprintf("unknown field: %s", key)))
+				errors[fieldPath] = append(errors[fieldPath], v.msg("strict", fmt.Sprintf("unknown field: %s", key)))
 			}
 		}
 	}
@@ -171,7 +172,10 @@ func (v *ObjectValidator) Validate(ctx *ValidationContext, value any) []string {
 
 			childValue := obj[key]
 			childErrors := validator.Validate(childCtx, childValue)
-			errors = append(errors, childErrors...)
+			// Merge child errors
+			for path, errs := range childErrors {
+				errors[path] = append(errors[path], errs...)
+			}
 		}
 	}
 
@@ -181,10 +185,13 @@ func (v *ObjectValidator) Validate(ctx *ValidationContext, value any) []string {
 			return lookupPath(ctx.RootData, path)
 		}
 		if err := v.customFn(obj, lookup); err != nil {
-			errors = append(errors, v.msg("custom", err.Error()))
+			errors[fieldPath] = append(errors[fieldPath], v.msg("custom", err.Error()))
 		}
 	}
 
+	if len(errors) == 0 {
+		return nil
+	}
 	return errors
 }
 

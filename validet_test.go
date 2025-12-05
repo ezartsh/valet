@@ -1266,6 +1266,398 @@ func TestTransformations(t *testing.T) {
 	})
 }
 
+func TestErrorResponseStructure(t *testing.T) {
+	t.Run("top level required fields error keys", func(t *testing.T) {
+		schema := Schema{
+			"username": String().Required(),
+			"email":    String().Required().Email(),
+			"bio":      String().Required(),
+			"profile":  Object().Required(),
+			"tags":     Array().Required(),
+			"settings": Object().Required(),
+		}
+
+		// Send empty data - all fields should have errors with their field names as keys
+		err := Validate(DataObject{}, schema)
+		if err == nil {
+			t.Fatal("Expected error for missing required fields")
+		}
+
+		expectedFields := []string{"username", "email", "bio", "profile", "tags", "settings"}
+		for _, field := range expectedFields {
+			if _, exists := err.Errors[field]; !exists {
+				t.Errorf("Expected error key '%s' to exist in errors", field)
+			}
+			if len(err.Errors[field]) == 0 {
+				t.Errorf("Expected error key '%s' to have at least one error message", field)
+			}
+		}
+
+		// Ensure we have exactly the expected number of error keys
+		if len(err.Errors) != len(expectedFields) {
+			t.Errorf("Expected %d error keys, got %d. Keys: %v", len(expectedFields), len(err.Errors), err.Errors)
+		}
+	})
+
+	t.Run("nested object required field error keys", func(t *testing.T) {
+		schema := Schema{
+			"profile": Object().Required().Shape(Schema{
+				"avatar":  String().Required(),
+				"website": String().Required(),
+			}),
+		}
+
+		// Send profile object but missing nested required fields
+		err := Validate(DataObject{
+			"profile": map[string]any{},
+		}, schema)
+		if err == nil {
+			t.Fatal("Expected error for missing nested required fields")
+		}
+
+		// Error keys should be "profile.avatar" and "profile.website"
+		expectedFields := []string{"profile.avatar", "profile.website"}
+		for _, field := range expectedFields {
+			if _, exists := err.Errors[field]; !exists {
+				t.Errorf("Expected error key '%s' to exist in errors. Got keys: %v", field, err.Errors)
+			}
+			if len(err.Errors[field]) == 0 {
+				t.Errorf("Expected error key '%s' to have at least one error message", field)
+			}
+		}
+	})
+
+	t.Run("deeply nested object required field error keys", func(t *testing.T) {
+		schema := Schema{
+			"user": Object().Required().Shape(Schema{
+				"profile": Object().Required().Shape(Schema{
+					"avatar": Object().Required().Shape(Schema{
+						"url": String().Required(),
+					}),
+				}),
+			}),
+		}
+
+		// Send nested objects but missing the deepest required field
+		err := Validate(DataObject{
+			"user": map[string]any{
+				"profile": map[string]any{
+					"avatar": map[string]any{},
+				},
+			},
+		}, schema)
+		if err == nil {
+			t.Fatal("Expected error for missing deeply nested required field")
+		}
+
+		// Error key should be "user.profile.avatar.url"
+		if _, exists := err.Errors["user.profile.avatar.url"]; !exists {
+			t.Errorf("Expected error key 'user.profile.avatar.url' to exist in errors. Got keys: %v", err.Errors)
+		}
+	})
+
+	t.Run("array of objects required field error keys", func(t *testing.T) {
+		schema := Schema{
+			"users": Array().Required().Of(Object().Shape(Schema{
+				"name":  String().Required(),
+				"email": String().Required(),
+			})),
+		}
+
+		// Send array with objects missing required fields
+		err := Validate(DataObject{
+			"users": []any{
+				map[string]any{},                            // index 0: missing name and email
+				map[string]any{"name": "John"},              // index 1: missing email
+				map[string]any{"email": "test@example.com"}, // index 2: missing name
+			},
+		}, schema)
+		if err == nil {
+			t.Fatal("Expected error for missing required fields in array objects")
+		}
+
+		// Error keys should follow pattern: "users.INDEX.FIELD"
+		expectedFields := []string{
+			"users.0.name",
+			"users.0.email",
+			"users.1.email",
+			"users.2.name",
+		}
+		for _, field := range expectedFields {
+			if _, exists := err.Errors[field]; !exists {
+				t.Errorf("Expected error key '%s' to exist in errors. Got keys: %v", field, err.Errors)
+			}
+		}
+	})
+
+	t.Run("array of objects with nested objects error keys", func(t *testing.T) {
+		schema := Schema{
+			"posts": Array().Required().Of(Object().Shape(Schema{
+				"title": String().Required(),
+				"author": Object().Required().Shape(Schema{
+					"id":   String().Required(),
+					"name": String().Required(),
+				}),
+			})),
+		}
+
+		// Send array with nested object missing required fields
+		err := Validate(DataObject{
+			"posts": []any{
+				map[string]any{
+					"title": "Post 1",
+					"author": map[string]any{
+						"name": "Author", // missing id
+					},
+				},
+				map[string]any{
+					"author": map[string]any{}, // missing title, id, and name
+				},
+			},
+		}, schema)
+		if err == nil {
+			t.Fatal("Expected error for missing required fields in nested array objects")
+		}
+
+		// Expected error keys
+		expectedFields := []string{
+			"posts.0.author.id",
+			"posts.1.title",
+			"posts.1.author.id",
+			"posts.1.author.name",
+		}
+		for _, field := range expectedFields {
+			if _, exists := err.Errors[field]; !exists {
+				t.Errorf("Expected error key '%s' to exist in errors. Got keys: %v", field, err.Errors)
+			}
+		}
+	})
+
+	t.Run("mixed validation errors structure", func(t *testing.T) {
+		schema := Schema{
+			"username": String().Required().Min(3).Max(20).AlphaNumeric(),
+			"email":    String().Required().Email(),
+			"age":      Float().Required().Min(18).Max(120),
+			"bio":      String().Required().Max(500),
+			"profile": Object().Required().Shape(Schema{
+				"avatar":  String().Required().URL(),
+				"website": String().URL(),
+			}),
+			"tags": Array().Required().Max(10).Of(String().Min(2).Max(20)),
+			"settings": Object().Required().Shape(Schema{
+				"notifications": Bool().Required(),
+				"theme":         String().Required().In("light", "dark"),
+			}),
+		}
+
+		// Send empty data - all required fields should have errors
+		err := Validate(DataObject{}, schema)
+		if err == nil {
+			t.Fatal("Expected error for missing required fields")
+		}
+
+		// Top level required fields should have errors
+		topLevelFields := []string{"username", "email", "age", "bio", "profile", "tags", "settings"}
+		for _, field := range topLevelFields {
+			if _, exists := err.Errors[field]; !exists {
+				t.Errorf("Expected error key '%s' to exist in errors when all data is missing", field)
+			}
+		}
+	})
+
+	t.Run("partial data with nested errors", func(t *testing.T) {
+		schema := Schema{
+			"username": String().Required(),
+			"profile": Object().Required().Shape(Schema{
+				"avatar":  String().Required(),
+				"website": String().Required(),
+			}),
+			"settings": Object().Required().Shape(Schema{
+				"notifications": Bool().Required(),
+			}),
+		}
+
+		// Send partial data - some top level, some nested missing
+		err := Validate(DataObject{
+			"profile":  map[string]any{"website": "https://example.com"},
+			"settings": map[string]any{},
+		}, schema)
+		if err == nil {
+			t.Fatal("Expected error for missing required fields")
+		}
+
+		// "username" should have error (missing top level)
+		if _, exists := err.Errors["username"]; !exists {
+			t.Errorf("Expected error key 'username' to exist")
+		}
+
+		// "profile.avatar" should have error (nested missing)
+		if _, exists := err.Errors["profile.avatar"]; !exists {
+			t.Errorf("Expected error key 'profile.avatar' to exist. Got: %v", err.Errors)
+		}
+
+		// "settings.notifications" should have error (nested missing)
+		if _, exists := err.Errors["settings.notifications"]; !exists {
+			t.Errorf("Expected error key 'settings.notifications' to exist. Got: %v", err.Errors)
+		}
+
+		// "profile.website" should NOT have error (provided)
+		if _, exists := err.Errors["profile.website"]; exists {
+			t.Errorf("Expected NO error key 'profile.website' since it was provided")
+		}
+	})
+
+	t.Run("array element validation error keys", func(t *testing.T) {
+		schema := Schema{
+			"emails": Array().Required().Of(String().Email()),
+		}
+
+		err := Validate(DataObject{
+			"emails": []any{"valid@example.com", "invalid-email", "another@test.com", "bad"},
+		}, schema)
+		if err == nil {
+			t.Fatal("Expected error for invalid emails in array")
+		}
+
+		// Error keys should be "emails.1" and "emails.3" for invalid emails at index 1 and 3
+		if _, exists := err.Errors["emails.1"]; !exists {
+			t.Errorf("Expected error key 'emails.1' to exist for invalid email. Got: %v", err.Errors)
+		}
+		if _, exists := err.Errors["emails.3"]; !exists {
+			t.Errorf("Expected error key 'emails.3' to exist for invalid email. Got: %v", err.Errors)
+		}
+
+		// Valid email indices should not have errors
+		if _, exists := err.Errors["emails.0"]; exists {
+			t.Errorf("Expected NO error key 'emails.0' since it's valid")
+		}
+		if _, exists := err.Errors["emails.2"]; exists {
+			t.Errorf("Expected NO error key 'emails.2' since it's valid")
+		}
+	})
+
+	t.Run("complex schema like TestComplexSchema with empty data", func(t *testing.T) {
+		schema := Schema{
+			"username": String().Required().Min(3).Max(20).AlphaNumeric(),
+			"email":    String().Required().Email(),
+			"age":      Float().Required().Min(18).Max(120),
+			"bio":      String().Nullable().Max(500),
+			"profile": Object().Required().Shape(Schema{
+				"avatar":  String().URL(),
+				"website": String().URL(),
+			}),
+			"tags": Array().Max(10).Of(String().Min(2).Max(20)),
+			"settings": Object().Shape(Schema{
+				"notifications": Bool().Default(true),
+				"theme":         String().In("light", "dark").Default("light"),
+			}),
+		}
+
+		// Send empty data - only required fields should have errors
+		err := Validate(DataObject{}, schema)
+		if err == nil {
+			t.Fatal("Expected error for missing required fields")
+		}
+
+		// Required fields should have errors
+		requiredFields := []string{"username", "email", "age", "profile"}
+		for _, field := range requiredFields {
+			if _, exists := err.Errors[field]; !exists {
+				t.Errorf("Expected error key '%s' to exist for required field", field)
+			}
+		}
+
+		// Nullable/optional fields should NOT have errors
+		optionalFields := []string{"bio", "tags", "settings"}
+		for _, field := range optionalFields {
+			if _, exists := err.Errors[field]; exists {
+				t.Errorf("Expected NO error key '%s' since it's not required. Got errors: %v", field, err.Errors[field])
+			}
+		}
+	})
+
+	t.Run("profile object provided but nested avatar required", func(t *testing.T) {
+		schema := Schema{
+			"profile": Object().Required().Shape(Schema{
+				"avatar": String().Required(),
+			}),
+		}
+
+		// Send profile but missing avatar
+		err := Validate(DataObject{
+			"profile": map[string]any{},
+		}, schema)
+		if err == nil {
+			t.Fatal("Expected error for missing nested avatar")
+		}
+
+		// Error should be "profile.avatar", not "profile"
+		if _, exists := err.Errors["profile.avatar"]; !exists {
+			t.Errorf("Expected error key 'profile.avatar' to exist. Got: %v", err.Errors)
+		}
+
+		// "profile" itself should NOT have an error since it was provided
+		if _, exists := err.Errors["profile"]; exists {
+			t.Errorf("Expected NO error key 'profile' since it was provided. Got: %v", err.Errors)
+		}
+	})
+
+	t.Run("multiple errors per field", func(t *testing.T) {
+		schema := Schema{
+			"password": String().Required().Min(8).Custom(func(v string, lookup Lookup) error {
+				if v == "short" {
+					return errors.New("password is too common")
+				}
+				return nil
+			}),
+		}
+
+		// "short" is less than 8 chars and is a common password
+		err := Validate(DataObject{"password": "short"}, schema)
+		if err == nil {
+			t.Fatal("Expected error for invalid password")
+		}
+
+		// The field should have multiple error messages
+		if len(err.Errors["password"]) < 1 {
+			t.Errorf("Expected at least 1 error for password, got %d", len(err.Errors["password"]))
+		}
+	})
+
+	t.Run("error messages are strings array", func(t *testing.T) {
+		schema := Schema{
+			"name": String().Required(),
+		}
+
+		err := Validate(DataObject{}, schema)
+		if err == nil {
+			t.Fatal("Expected error")
+		}
+
+		// Verify the error structure is map[string][]string
+		errors := err.Errors
+		if errors == nil {
+			t.Fatal("Expected errors map to not be nil")
+		}
+
+		nameErrors, exists := errors["name"]
+		if !exists {
+			t.Fatal("Expected 'name' key in errors")
+		}
+
+		if len(nameErrors) == 0 {
+			t.Fatal("Expected at least one error message for 'name'")
+		}
+
+		// Each error should be a non-empty string
+		for i, msg := range nameErrors {
+			if msg == "" {
+				t.Errorf("Error message at index %d should not be empty", i)
+			}
+		}
+	})
+}
+
 func TestCoercion(t *testing.T) {
 	t.Run("number coerce from string", func(t *testing.T) {
 		schema := Schema{

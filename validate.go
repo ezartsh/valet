@@ -134,13 +134,15 @@ func Validate(data DataObject, schema Schema, opts ...Options) *ValidationError 
 		}
 
 		value := data[field]
-		errors := validator.Validate(fieldCtx, value)
+		fieldErrors := validator.Validate(fieldCtx, value)
 
-		if len(errors) > 0 {
-			allErrors[field] = errors
-			if options.AbortEarly {
-				return &ValidationError{Errors: allErrors}
-			}
+		// Merge field errors into allErrors
+		for path, errs := range fieldErrors {
+			allErrors[path] = append(allErrors[path], errs...)
+		}
+
+		if len(fieldErrors) > 0 && options.AbortEarly {
+			return &ValidationError{Errors: allErrors}
 		}
 
 		// Collect DB checks

@@ -18,7 +18,7 @@ type Schema map[string]Validator
 
 // Validator is the interface all validators must implement
 type Validator interface {
-	Validate(ctx *ValidationContext, value any) []string
+	Validate(ctx *ValidationContext, value any) map[string][]string
 }
 
 // ValidationContext holds validation state
@@ -27,6 +27,18 @@ type ValidationContext struct {
 	RootData DataObject
 	Path     []string
 	Options  *Options
+}
+
+// FullPath returns the dot-notation path string from the path slice
+func (ctx *ValidationContext) FullPath() string {
+	if len(ctx.Path) == 0 {
+		return ""
+	}
+	result := ctx.Path[0]
+	for i := 1; i < len(ctx.Path); i++ {
+		result += "." + ctx.Path[i]
+	}
+	return result
 }
 
 // Options for validation

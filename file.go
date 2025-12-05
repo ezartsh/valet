@@ -155,8 +155,9 @@ func (v *FileValidator) Nullable() *FileValidator {
 }
 
 // Validate implements Validator interface
-func (v *FileValidator) Validate(ctx *ValidationContext, value any) []string {
-	var errors []string
+func (v *FileValidator) Validate(ctx *ValidationContext, value any) map[string][]string {
+	errors := make(map[string][]string)
+	fieldPath := ctx.FullPath()
 	fieldName := ctx.Path[len(ctx.Path)-1]
 
 	// Handle nil
@@ -165,15 +166,15 @@ func (v *FileValidator) Validate(ctx *ValidationContext, value any) []string {
 			return nil
 		}
 		if v.required {
-			errors = append(errors, v.msg("required", fmt.Sprintf("%s is required", fieldName)))
+			errors[fieldPath] = append(errors[fieldPath], v.msg("required", fmt.Sprintf("%s is required", fieldName)))
 			return errors
 		}
 		if v.requiredIf != nil && v.requiredIf(ctx.RootData) {
-			errors = append(errors, v.msg("required", fmt.Sprintf("%s is required", fieldName)))
+			errors[fieldPath] = append(errors[fieldPath], v.msg("required", fmt.Sprintf("%s is required", fieldName)))
 			return errors
 		}
 		if v.requiredUnless != nil && !v.requiredUnless(ctx.RootData) {
-			errors = append(errors, v.msg("required", fmt.Sprintf("%s is required", fieldName)))
+			errors[fieldPath] = append(errors[fieldPath], v.msg("required", fmt.Sprintf("%s is required", fieldName)))
 			return errors
 		}
 		return nil
@@ -187,25 +188,25 @@ func (v *FileValidator) Validate(ctx *ValidationContext, value any) []string {
 	case multipart.FileHeader:
 		file = &f
 	default:
-		errors = append(errors, v.msg("type", fmt.Sprintf("%s must be a file", fieldName)))
+		errors[fieldPath] = append(errors[fieldPath], v.msg("type", fmt.Sprintf("%s must be a file", fieldName)))
 		return errors
 	}
 
 	// Min size
 	if v.minSet && file.Size < v.min {
-		errors = append(errors, v.msg("min", fmt.Sprintf("%s must be at least %s", fieldName, formatFileSize(v.min))))
+		errors[fieldPath] = append(errors[fieldPath], v.msg("min", fmt.Sprintf("%s must be at least %s", fieldName, formatFileSize(v.min))))
 	}
 
 	// Max size
 	if v.maxSet && file.Size > v.max {
-		errors = append(errors, v.msg("max", fmt.Sprintf("%s must not be greater than %s", fieldName, formatFileSize(v.max))))
+		errors[fieldPath] = append(errors[fieldPath], v.msg("max", fmt.Sprintf("%s must not be greater than %s", fieldName, formatFileSize(v.max))))
 	}
 
 	// MIME types
 	if len(v.mimes) > 0 {
 		detectedMime, err := detectMimeType(file)
 		if err != nil {
-			errors = append(errors, v.msg("mimes", fmt.Sprintf("%s: unable to detect file type", fieldName)))
+			errors[fieldPath] = append(errors[fieldPath], v.msg("mimes", fmt.Sprintf("%s: unable to detect file type", fieldName)))
 		} else {
 			valid := false
 			for _, mime := range v.mimes {
@@ -223,7 +224,7 @@ func (v *FileValidator) Validate(ctx *ValidationContext, value any) []string {
 				}
 			}
 			if !valid {
-				errors = append(errors, v.msg("mimes", fmt.Sprintf("%s must be a file of type: %s", fieldName, strings.Join(v.mimes, ", "))))
+				errors[fieldPath] = append(errors[fieldPath], v.msg("mimes", fmt.Sprintf("%s must be a file of type: %s", fieldName, strings.Join(v.mimes, ", "))))
 			}
 		}
 	}
@@ -239,7 +240,7 @@ func (v *FileValidator) Validate(ctx *ValidationContext, value any) []string {
 			}
 		}
 		if !valid {
-			errors = append(errors, v.msg("extensions", fmt.Sprintf("%s must be a file with extension: %s", fieldName, strings.Join(v.extensions, ", "))))
+			errors[fieldPath] = append(errors[fieldPath], v.msg("extensions", fmt.Sprintf("%s must be a file with extension: %s", fieldName, strings.Join(v.extensions, ", "))))
 		}
 	}
 
@@ -247,7 +248,7 @@ func (v *FileValidator) Validate(ctx *ValidationContext, value any) []string {
 	if v.image {
 		detectedMime, err := detectMimeType(file)
 		if err != nil {
-			errors = append(errors, v.msg("image", fmt.Sprintf("%s must be an image", fieldName)))
+			errors[fieldPath] = append(errors[fieldPath], v.msg("image", fmt.Sprintf("%s must be an image", fieldName)))
 		} else {
 			isImage := false
 			for _, imageMime := range ImageMimes {
@@ -257,7 +258,7 @@ func (v *FileValidator) Validate(ctx *ValidationContext, value any) []string {
 				}
 			}
 			if !isImage {
-				errors = append(errors, v.msg("image", fmt.Sprintf("%s must be an image", fieldName)))
+				errors[fieldPath] = append(errors[fieldPath], v.msg("image", fmt.Sprintf("%s must be an image", fieldName)))
 			}
 		}
 	}
@@ -266,29 +267,29 @@ func (v *FileValidator) Validate(ctx *ValidationContext, value any) []string {
 	if v.dimensions != nil {
 		width, height, err := getImageDimensions(file)
 		if err != nil {
-			errors = append(errors, v.msg("dimensions", fmt.Sprintf("%s must be an image with valid dimensions", fieldName)))
+			errors[fieldPath] = append(errors[fieldPath], v.msg("dimensions", fmt.Sprintf("%s must be an image with valid dimensions", fieldName)))
 		} else {
 			d := v.dimensions
 			if d.Width > 0 && width != d.Width {
-				errors = append(errors, v.msg("dimensions", fmt.Sprintf("%s must have width of %d pixels", fieldName, d.Width)))
+				errors[fieldPath] = append(errors[fieldPath], v.msg("dimensions", fmt.Sprintf("%s must have width of %d pixels", fieldName, d.Width)))
 			}
 			if d.Height > 0 && height != d.Height {
-				errors = append(errors, v.msg("dimensions", fmt.Sprintf("%s must have height of %d pixels", fieldName, d.Height)))
+				errors[fieldPath] = append(errors[fieldPath], v.msg("dimensions", fmt.Sprintf("%s must have height of %d pixels", fieldName, d.Height)))
 			}
 			if d.MinWidth > 0 && width < d.MinWidth {
-				errors = append(errors, v.msg("dimensions", fmt.Sprintf("%s must have minimum width of %d pixels", fieldName, d.MinWidth)))
+				errors[fieldPath] = append(errors[fieldPath], v.msg("dimensions", fmt.Sprintf("%s must have minimum width of %d pixels", fieldName, d.MinWidth)))
 			}
 			if d.MaxWidth > 0 && width > d.MaxWidth {
-				errors = append(errors, v.msg("dimensions", fmt.Sprintf("%s must have maximum width of %d pixels", fieldName, d.MaxWidth)))
+				errors[fieldPath] = append(errors[fieldPath], v.msg("dimensions", fmt.Sprintf("%s must have maximum width of %d pixels", fieldName, d.MaxWidth)))
 			}
 			if d.MinHeight > 0 && height < d.MinHeight {
-				errors = append(errors, v.msg("dimensions", fmt.Sprintf("%s must have minimum height of %d pixels", fieldName, d.MinHeight)))
+				errors[fieldPath] = append(errors[fieldPath], v.msg("dimensions", fmt.Sprintf("%s must have minimum height of %d pixels", fieldName, d.MinHeight)))
 			}
 			if d.MaxHeight > 0 && height > d.MaxHeight {
-				errors = append(errors, v.msg("dimensions", fmt.Sprintf("%s must have maximum height of %d pixels", fieldName, d.MaxHeight)))
+				errors[fieldPath] = append(errors[fieldPath], v.msg("dimensions", fmt.Sprintf("%s must have maximum height of %d pixels", fieldName, d.MaxHeight)))
 			}
 			if d.Ratio != "" && !checkAspectRatio(width, height, d.Ratio) {
-				errors = append(errors, v.msg("dimensions", fmt.Sprintf("%s must have aspect ratio of %s", fieldName, d.Ratio)))
+				errors[fieldPath] = append(errors[fieldPath], v.msg("dimensions", fmt.Sprintf("%s must have aspect ratio of %s", fieldName, d.Ratio)))
 			}
 		}
 	}
@@ -299,10 +300,13 @@ func (v *FileValidator) Validate(ctx *ValidationContext, value any) []string {
 			return lookupPath(ctx.RootData, path)
 		}
 		if err := v.customFn(file, lookup); err != nil {
-			errors = append(errors, v.msg("custom", err.Error()))
+			errors[fieldPath] = append(errors[fieldPath], v.msg("custom", err.Error()))
 		}
 	}
 
+	if len(errors) == 0 {
+		return nil
+	}
 	return errors
 }
 

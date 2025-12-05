@@ -230,8 +230,9 @@ func (v *StringValidator) Nullable() *StringValidator {
 }
 
 // Validate implements Validator interface
-func (v *StringValidator) Validate(ctx *ValidationContext, value any) []string {
-	var errors []string
+func (v *StringValidator) Validate(ctx *ValidationContext, value any) map[string][]string {
+	errors := make(map[string][]string)
+	fieldPath := ctx.FullPath()
 	fieldName := ctx.Path[len(ctx.Path)-1]
 
 	// Handle nil
@@ -242,13 +243,13 @@ func (v *StringValidator) Validate(ctx *ValidationContext, value any) []string {
 		if v.defaultValue != nil {
 			value = *v.defaultValue
 		} else if v.required {
-			errors = append(errors, v.msg("required", fmt.Sprintf("%s is required", fieldName)))
+			errors[fieldPath] = append(errors[fieldPath], v.msg("required", fmt.Sprintf("%s is required", fieldName)))
 			return errors
 		} else if v.requiredIf != nil && v.requiredIf(ctx.RootData) {
-			errors = append(errors, v.msg("required", fmt.Sprintf("%s is required", fieldName)))
+			errors[fieldPath] = append(errors[fieldPath], v.msg("required", fmt.Sprintf("%s is required", fieldName)))
 			return errors
 		} else if v.requiredUnless != nil && !v.requiredUnless(ctx.RootData) {
-			errors = append(errors, v.msg("required", fmt.Sprintf("%s is required", fieldName)))
+			errors[fieldPath] = append(errors[fieldPath], v.msg("required", fmt.Sprintf("%s is required", fieldName)))
 			return errors
 		} else {
 			return nil
@@ -258,7 +259,7 @@ func (v *StringValidator) Validate(ctx *ValidationContext, value any) []string {
 	// Type check
 	str, ok := value.(string)
 	if !ok {
-		errors = append(errors, v.msg("type", fmt.Sprintf("%s must be a string", fieldName)))
+		errors[fieldPath] = append(errors[fieldPath], v.msg("type", fmt.Sprintf("%s must be a string", fieldName)))
 		return errors
 	}
 
@@ -276,15 +277,15 @@ func (v *StringValidator) Validate(ctx *ValidationContext, value any) []string {
 	// Empty string check for required
 	if str == "" {
 		if v.required {
-			errors = append(errors, v.msg("required", fmt.Sprintf("%s is required", fieldName)))
+			errors[fieldPath] = append(errors[fieldPath], v.msg("required", fmt.Sprintf("%s is required", fieldName)))
 			return errors
 		}
 		if v.requiredIf != nil && v.requiredIf(ctx.RootData) {
-			errors = append(errors, v.msg("required", fmt.Sprintf("%s is required", fieldName)))
+			errors[fieldPath] = append(errors[fieldPath], v.msg("required", fmt.Sprintf("%s is required", fieldName)))
 			return errors
 		}
 		if v.requiredUnless != nil && !v.requiredUnless(ctx.RootData) {
-			errors = append(errors, v.msg("required", fmt.Sprintf("%s is required", fieldName)))
+			errors[fieldPath] = append(errors[fieldPath], v.msg("required", fmt.Sprintf("%s is required", fieldName)))
 			return errors
 		}
 		return nil
@@ -294,78 +295,78 @@ func (v *StringValidator) Validate(ctx *ValidationContext, value any) []string {
 
 	// Min length
 	if v.minSet && length < v.min {
-		errors = append(errors, v.msg("min", fmt.Sprintf("%s must be at least %d characters", fieldName, v.min)))
+		errors[fieldPath] = append(errors[fieldPath], v.msg("min", fmt.Sprintf("%s must be at least %d characters", fieldName, v.min)))
 	}
 
 	// Max length
 	if v.maxSet && length > v.max {
-		errors = append(errors, v.msg("max", fmt.Sprintf("%s must be at most %d characters", fieldName, v.max)))
+		errors[fieldPath] = append(errors[fieldPath], v.msg("max", fmt.Sprintf("%s must be at most %d characters", fieldName, v.max)))
 	}
 
 	// Email
 	if v.email && !isValidEmail(str) {
-		errors = append(errors, v.msg("email", fmt.Sprintf("%s must be a valid email", fieldName)))
+		errors[fieldPath] = append(errors[fieldPath], v.msg("email", fmt.Sprintf("%s must be a valid email", fieldName)))
 	}
 
 	// URL
 	if v.url {
 		if !isValidURL(str) {
-			errors = append(errors, v.msg("url", fmt.Sprintf("%s must be a valid URL", fieldName)))
+			errors[fieldPath] = append(errors[fieldPath], v.msg("url", fmt.Sprintf("%s must be a valid URL", fieldName)))
 		} else if v.urlOptions != nil {
 			u, _ := url.Parse(str)
 			if v.urlOptions.Http && !v.urlOptions.Https && u.Scheme != "http" {
-				errors = append(errors, v.msg("url", fmt.Sprintf("%s must be an HTTP URL", fieldName)))
+				errors[fieldPath] = append(errors[fieldPath], v.msg("url", fmt.Sprintf("%s must be an HTTP URL", fieldName)))
 			} else if v.urlOptions.Https && !v.urlOptions.Http && u.Scheme != "https" {
-				errors = append(errors, v.msg("url", fmt.Sprintf("%s must be an HTTPS URL", fieldName)))
+				errors[fieldPath] = append(errors[fieldPath], v.msg("url", fmt.Sprintf("%s must be an HTTPS URL", fieldName)))
 			} else if v.urlOptions.Http && v.urlOptions.Https && u.Scheme != "http" && u.Scheme != "https" {
-				errors = append(errors, v.msg("url", fmt.Sprintf("%s must be an HTTP or HTTPS URL", fieldName)))
+				errors[fieldPath] = append(errors[fieldPath], v.msg("url", fmt.Sprintf("%s must be an HTTP or HTTPS URL", fieldName)))
 			}
 		}
 	}
 
 	// StartsWith
 	if v.startsWith != "" && !strings.HasPrefix(str, v.startsWith) {
-		errors = append(errors, v.msg("startsWith", fmt.Sprintf("%s must start with %s", fieldName, v.startsWith)))
+		errors[fieldPath] = append(errors[fieldPath], v.msg("startsWith", fmt.Sprintf("%s must start with %s", fieldName, v.startsWith)))
 	}
 
 	// EndsWith
 	if v.endsWith != "" && !strings.HasSuffix(str, v.endsWith) {
-		errors = append(errors, v.msg("endsWith", fmt.Sprintf("%s must end with %s", fieldName, v.endsWith)))
+		errors[fieldPath] = append(errors[fieldPath], v.msg("endsWith", fmt.Sprintf("%s must end with %s", fieldName, v.endsWith)))
 	}
 
 	// Contains
 	if v.contains != "" && !strings.Contains(str, v.contains) {
-		errors = append(errors, v.msg("contains", fmt.Sprintf("%s must contain %s", fieldName, v.contains)))
+		errors[fieldPath] = append(errors[fieldPath], v.msg("contains", fmt.Sprintf("%s must contain %s", fieldName, v.contains)))
 	}
 
 	// Alpha
 	if v.alpha && !isAlpha(str) {
-		errors = append(errors, v.msg("alpha", fmt.Sprintf("%s must contain only letters", fieldName)))
+		errors[fieldPath] = append(errors[fieldPath], v.msg("alpha", fmt.Sprintf("%s must contain only letters", fieldName)))
 	}
 
 	// AlphaNumeric
 	if v.alphaNumeric && !isAlphaNumeric(str) {
-		errors = append(errors, v.msg("alphaNumeric", fmt.Sprintf("%s must contain only letters and numbers", fieldName)))
+		errors[fieldPath] = append(errors[fieldPath], v.msg("alphaNumeric", fmt.Sprintf("%s must contain only letters and numbers", fieldName)))
 	}
 
 	// Regex
 	if v.regex != nil && !v.regex.MatchString(str) {
-		errors = append(errors, v.msg("regex", fmt.Sprintf("%s format is invalid", fieldName)))
+		errors[fieldPath] = append(errors[fieldPath], v.msg("regex", fmt.Sprintf("%s format is invalid", fieldName)))
 	}
 
 	// NotRegex
 	if v.notRegex != nil && v.notRegex.MatchString(str) {
-		errors = append(errors, v.msg("notRegex", fmt.Sprintf("%s format is invalid", fieldName)))
+		errors[fieldPath] = append(errors[fieldPath], v.msg("notRegex", fmt.Sprintf("%s format is invalid", fieldName)))
 	}
 
 	// In
 	if len(v.in) > 0 && !contains(v.in, str) {
-		errors = append(errors, v.msg("in", fmt.Sprintf("%s must be one of: %s", fieldName, strings.Join(v.in, ", "))))
+		errors[fieldPath] = append(errors[fieldPath], v.msg("in", fmt.Sprintf("%s must be one of: %s", fieldName, strings.Join(v.in, ", "))))
 	}
 
 	// NotIn
 	if len(v.notIn) > 0 && contains(v.notIn, str) {
-		errors = append(errors, v.msg("notIn", fmt.Sprintf("%s must not be one of: %s", fieldName, strings.Join(v.notIn, ", "))))
+		errors[fieldPath] = append(errors[fieldPath], v.msg("notIn", fmt.Sprintf("%s must not be one of: %s", fieldName, strings.Join(v.notIn, ", "))))
 	}
 
 	// Custom validation
@@ -374,10 +375,13 @@ func (v *StringValidator) Validate(ctx *ValidationContext, value any) []string {
 			return lookupPath(ctx.RootData, path)
 		}
 		if err := v.customFn(str, lookup); err != nil {
-			errors = append(errors, v.msg("custom", err.Error()))
+			errors[fieldPath] = append(errors[fieldPath], v.msg("custom", err.Error()))
 		}
 	}
 
+	if len(errors) == 0 {
+		return nil
+	}
 	return errors
 }
 

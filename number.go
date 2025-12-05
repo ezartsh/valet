@@ -203,8 +203,9 @@ func (v *NumberValidator[T]) Coerce() *NumberValidator[T] {
 }
 
 // Validate implements Validator interface
-func (v *NumberValidator[T]) Validate(ctx *ValidationContext, value any) []string {
-	var errors []string
+func (v *NumberValidator[T]) Validate(ctx *ValidationContext, value any) map[string][]string {
+	errors := make(map[string][]string)
+	fieldPath := ctx.FullPath()
 	fieldName := ctx.Path[len(ctx.Path)-1]
 
 	// Handle nil
@@ -215,13 +216,13 @@ func (v *NumberValidator[T]) Validate(ctx *ValidationContext, value any) []strin
 		if v.defaultValue != nil {
 			value = *v.defaultValue
 		} else if v.required {
-			errors = append(errors, v.msg("required", fmt.Sprintf("%s is required", fieldName)))
+			errors[fieldPath] = append(errors[fieldPath], v.msg("required", fmt.Sprintf("%s is required", fieldName)))
 			return errors
 		} else if v.requiredIf != nil && v.requiredIf(ctx.RootData) {
-			errors = append(errors, v.msg("required", fmt.Sprintf("%s is required", fieldName)))
+			errors[fieldPath] = append(errors[fieldPath], v.msg("required", fmt.Sprintf("%s is required", fieldName)))
 			return errors
 		} else if v.requiredUnless != nil && !v.requiredUnless(ctx.RootData) {
-			errors = append(errors, v.msg("required", fmt.Sprintf("%s is required", fieldName)))
+			errors[fieldPath] = append(errors[fieldPath], v.msg("required", fmt.Sprintf("%s is required", fieldName)))
 			return errors
 		} else {
 			return nil
@@ -240,45 +241,45 @@ func (v *NumberValidator[T]) Validate(ctx *ValidationContext, value any) []strin
 	// Convert to target type
 	num, ok := toNumber[T](value)
 	if !ok {
-		errors = append(errors, v.msg("type", fmt.Sprintf("%s must be a number", fieldName)))
+		errors[fieldPath] = append(errors[fieldPath], v.msg("type", fmt.Sprintf("%s must be a number", fieldName)))
 		return errors
 	}
 
 	// Min
 	if v.minSet && num < v.min {
-		errors = append(errors, v.msg("min", fmt.Sprintf("%s must be at least %v", fieldName, v.min)))
+		errors[fieldPath] = append(errors[fieldPath], v.msg("min", fmt.Sprintf("%s must be at least %v", fieldName, v.min)))
 	}
 
 	// Max
 	if v.maxSet && num > v.max {
-		errors = append(errors, v.msg("max", fmt.Sprintf("%s must be at most %v", fieldName, v.max)))
+		errors[fieldPath] = append(errors[fieldPath], v.msg("max", fmt.Sprintf("%s must be at most %v", fieldName, v.max)))
 	}
 
 	// Positive
 	if v.positive && num <= 0 {
-		errors = append(errors, v.msg("positive", fmt.Sprintf("%s must be positive", fieldName)))
+		errors[fieldPath] = append(errors[fieldPath], v.msg("positive", fmt.Sprintf("%s must be positive", fieldName)))
 	}
 
 	// Negative
 	if v.negative && num >= 0 {
-		errors = append(errors, v.msg("negative", fmt.Sprintf("%s must be negative", fieldName)))
+		errors[fieldPath] = append(errors[fieldPath], v.msg("negative", fmt.Sprintf("%s must be negative", fieldName)))
 	}
 
 	// Integer check
 	if v.integer {
 		if f, ok := any(num).(float64); ok && f != float64(int64(f)) {
-			errors = append(errors, v.msg("integer", fmt.Sprintf("%s must be an integer", fieldName)))
+			errors[fieldPath] = append(errors[fieldPath], v.msg("integer", fmt.Sprintf("%s must be an integer", fieldName)))
 		}
 	}
 
 	// In
 	if len(v.in) > 0 && !containsNum(v.in, num) {
-		errors = append(errors, v.msg("in", fmt.Sprintf("%s must be one of the allowed values", fieldName)))
+		errors[fieldPath] = append(errors[fieldPath], v.msg("in", fmt.Sprintf("%s must be one of the allowed values", fieldName)))
 	}
 
 	// NotIn
 	if len(v.notIn) > 0 && containsNum(v.notIn, num) {
-		errors = append(errors, v.msg("notIn", fmt.Sprintf("%s must not be one of the disallowed values", fieldName)))
+		errors[fieldPath] = append(errors[fieldPath], v.msg("notIn", fmt.Sprintf("%s must not be one of the disallowed values", fieldName)))
 	}
 
 	// String representation for digit/regex checks
@@ -299,22 +300,22 @@ func (v *NumberValidator[T]) Validate(ctx *ValidationContext, value any) []strin
 
 	// MinDigits
 	if v.minDigitsSet && len(digitStr) < v.minDigits {
-		errors = append(errors, v.msg("minDigits", fmt.Sprintf("%s must have at least %d digits", fieldName, v.minDigits)))
+		errors[fieldPath] = append(errors[fieldPath], v.msg("minDigits", fmt.Sprintf("%s must have at least %d digits", fieldName, v.minDigits)))
 	}
 
 	// MaxDigits
 	if v.maxDigitsSet && len(digitStr) > v.maxDigits {
-		errors = append(errors, v.msg("maxDigits", fmt.Sprintf("%s must have at most %d digits", fieldName, v.maxDigits)))
+		errors[fieldPath] = append(errors[fieldPath], v.msg("maxDigits", fmt.Sprintf("%s must have at most %d digits", fieldName, v.maxDigits)))
 	}
 
 	// Regex on string representation
 	if v.regex != nil && !v.regex.MatchString(numStr) {
-		errors = append(errors, v.msg("regex", fmt.Sprintf("%s format is invalid", fieldName)))
+		errors[fieldPath] = append(errors[fieldPath], v.msg("regex", fmt.Sprintf("%s format is invalid", fieldName)))
 	}
 
 	// NotRegex on string representation
 	if v.notRegex != nil && v.notRegex.MatchString(numStr) {
-		errors = append(errors, v.msg("notRegex", fmt.Sprintf("%s format is invalid", fieldName)))
+		errors[fieldPath] = append(errors[fieldPath], v.msg("notRegex", fmt.Sprintf("%s format is invalid", fieldName)))
 	}
 
 	// Custom validation
@@ -323,10 +324,13 @@ func (v *NumberValidator[T]) Validate(ctx *ValidationContext, value any) []strin
 			return lookupPath(ctx.RootData, path)
 		}
 		if err := v.customFn(num, lookup); err != nil {
-			errors = append(errors, v.msg("custom", err.Error()))
+			errors[fieldPath] = append(errors[fieldPath], v.msg("custom", err.Error()))
 		}
 	}
 
+	if len(errors) == 0 {
+		return nil
+	}
 	return errors
 }
 

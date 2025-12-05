@@ -84,8 +84,9 @@ func (v *BoolValidator) Coerce() *BoolValidator {
 }
 
 // Validate implements Validator interface
-func (v *BoolValidator) Validate(ctx *ValidationContext, value any) []string {
-	var errors []string
+func (v *BoolValidator) Validate(ctx *ValidationContext, value any) map[string][]string {
+	errors := make(map[string][]string)
+	fieldPath := ctx.FullPath()
 	fieldName := ctx.Path[len(ctx.Path)-1]
 
 	// Handle nil
@@ -96,13 +97,13 @@ func (v *BoolValidator) Validate(ctx *ValidationContext, value any) []string {
 		if v.defaultValue != nil {
 			value = *v.defaultValue
 		} else if v.required {
-			errors = append(errors, v.msg("required", fmt.Sprintf("%s is required", fieldName)))
+			errors[fieldPath] = append(errors[fieldPath], v.msg("required", fmt.Sprintf("%s is required", fieldName)))
 			return errors
 		} else if v.requiredIf != nil && v.requiredIf(ctx.RootData) {
-			errors = append(errors, v.msg("required", fmt.Sprintf("%s is required", fieldName)))
+			errors[fieldPath] = append(errors[fieldPath], v.msg("required", fmt.Sprintf("%s is required", fieldName)))
 			return errors
 		} else if v.requiredUnless != nil && !v.requiredUnless(ctx.RootData) {
-			errors = append(errors, v.msg("required", fmt.Sprintf("%s is required", fieldName)))
+			errors[fieldPath] = append(errors[fieldPath], v.msg("required", fmt.Sprintf("%s is required", fieldName)))
 			return errors
 		} else {
 			return nil
@@ -117,18 +118,18 @@ func (v *BoolValidator) Validate(ctx *ValidationContext, value any) []string {
 	// Type check
 	b, ok := value.(bool)
 	if !ok {
-		errors = append(errors, v.msg("type", fmt.Sprintf("%s must be a boolean", fieldName)))
+		errors[fieldPath] = append(errors[fieldPath], v.msg("type", fmt.Sprintf("%s must be a boolean", fieldName)))
 		return errors
 	}
 
 	// Must be true
 	if v.mustBeTrue && !b {
-		errors = append(errors, v.msg("true", fmt.Sprintf("%s must be true", fieldName)))
+		errors[fieldPath] = append(errors[fieldPath], v.msg("true", fmt.Sprintf("%s must be true", fieldName)))
 	}
 
 	// Must be false
 	if v.mustBeFalse && b {
-		errors = append(errors, v.msg("false", fmt.Sprintf("%s must be false", fieldName)))
+		errors[fieldPath] = append(errors[fieldPath], v.msg("false", fmt.Sprintf("%s must be false", fieldName)))
 	}
 
 	// Custom validation
@@ -137,10 +138,13 @@ func (v *BoolValidator) Validate(ctx *ValidationContext, value any) []string {
 			return lookupPath(ctx.RootData, path)
 		}
 		if err := v.customFn(b, lookup); err != nil {
-			errors = append(errors, v.msg("custom", err.Error()))
+			errors[fieldPath] = append(errors[fieldPath], v.msg("custom", err.Error()))
 		}
 	}
 
+	if len(errors) == 0 {
+		return nil
+	}
 	return errors
 }
 
