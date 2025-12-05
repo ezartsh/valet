@@ -1,6 +1,9 @@
 package valet
 
-import "fmt"
+import (
+	"fmt"
+	"sync"
+)
 
 // ArrayValidator validates array/slice values with fluent API
 type ArrayValidator struct {
@@ -19,6 +22,7 @@ type ArrayValidator struct {
 	customFn       func(value []any, lookup Lookup) error
 	messages       map[string]string
 	nullable       bool
+	concurrent     int // Number of goroutines for parallel validation (0 = sequential)
 }
 
 // Array creates a new array validator
@@ -108,6 +112,16 @@ func (v *ArrayValidator) Nonempty() *ArrayValidator {
 	return v.Min(1)
 }
 
+// Concurrent enables parallel validation of array elements
+// n specifies the maximum number of goroutines to use (0 = sequential)
+func (v *ArrayValidator) Concurrent(n int) *ArrayValidator {
+	if n < 0 {
+		n = 0
+	}
+	v.concurrent = n
+	return v
+}
+
 // Validate implements Validator interface
 func (v *ArrayValidator) Validate(ctx *ValidationContext, value any) map[string][]string {
 	errors := make(map[string][]string)
@@ -172,17 +186,50 @@ func (v *ArrayValidator) Validate(ctx *ValidationContext, value any) map[string]
 
 	// Validate each element
 	if v.element != nil {
-		for i, item := range arr {
-			childCtx := &ValidationContext{
-				Ctx:      ctx.Ctx,
-				RootData: ctx.RootData,
-				Path:     append(ctx.Path, fmt.Sprintf("%d", i)),
-				Options:  ctx.Options,
+		if v.concurrent > 0 && len(arr) > 1 {
+			// Concurrent validation
+			var wg sync.WaitGroup
+			var mu sync.Mutex
+			sem := make(chan struct{}, v.concurrent)
+
+			for i, item := range arr {
+				wg.Add(1)
+				go func(idx int, val any) {
+					defer wg.Done()
+					sem <- struct{}{}        // Acquire semaphore
+					defer func() { <-sem }() // Release semaphore
+
+					childCtx := &ValidationContext{
+						Ctx:      ctx.Ctx,
+						RootData: ctx.RootData,
+						Path:     append(append([]string{}, ctx.Path...), fmt.Sprintf("%d", idx)),
+						Options:  ctx.Options,
+					}
+					childErrors := v.element.Validate(childCtx, val)
+					if len(childErrors) > 0 {
+						mu.Lock()
+						for path, errs := range childErrors {
+							errors[path] = append(errors[path], errs...)
+						}
+						mu.Unlock()
+					}
+				}(i, item)
 			}
-			childErrors := v.element.Validate(childCtx, item)
-			// Merge child errors
-			for path, errs := range childErrors {
-				errors[path] = append(errors[path], errs...)
+			wg.Wait()
+		} else {
+			// Sequential validation
+			for i, item := range arr {
+				childCtx := &ValidationContext{
+					Ctx:      ctx.Ctx,
+					RootData: ctx.RootData,
+					Path:     append(ctx.Path, fmt.Sprintf("%d", i)),
+					Options:  ctx.Options,
+				}
+				childErrors := v.element.Validate(childCtx, item)
+				// Merge child errors
+				for path, errs := range childErrors {
+					errors[path] = append(errors[path], errs...)
+				}
 			}
 		}
 	}

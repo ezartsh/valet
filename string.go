@@ -14,6 +14,9 @@ type UrlOptions struct {
 	Https bool
 }
 
+// StringTransformFunc is a function that transforms a string
+type StringTransformFunc func(string) string
+
 // StringValidator validates string values with fluent API
 type StringValidator struct {
 	required       bool
@@ -45,6 +48,9 @@ type StringValidator struct {
 	messages       map[string]string
 	defaultValue   *string
 	nullable       bool
+	transforms     []StringTransformFunc
+	sameAs         string
+	differentFrom  string
 }
 
 // String creates a new string validator
@@ -229,6 +235,24 @@ func (v *StringValidator) Nullable() *StringValidator {
 	return v
 }
 
+// Transform adds a transformation function to be applied before validation
+func (v *StringValidator) Transform(fn StringTransformFunc) *StringValidator {
+	v.transforms = append(v.transforms, fn)
+	return v
+}
+
+// SameAs validates that this field equals another field's value
+func (v *StringValidator) SameAs(fieldPath string) *StringValidator {
+	v.sameAs = fieldPath
+	return v
+}
+
+// DifferentFrom validates that this field differs from another field's value
+func (v *StringValidator) DifferentFrom(fieldPath string) *StringValidator {
+	v.differentFrom = fieldPath
+	return v
+}
+
 // Validate implements Validator interface
 func (v *StringValidator) Validate(ctx *ValidationContext, value any) map[string][]string {
 	errors := make(map[string][]string)
@@ -272,6 +296,10 @@ func (v *StringValidator) Validate(ctx *ValidationContext, value any) map[string
 	}
 	if v.uppercase {
 		str = strings.ToUpper(str)
+	}
+	// Apply custom transforms
+	for _, transform := range v.transforms {
+		str = transform(str)
 	}
 
 	// Empty string check for required
@@ -367,6 +395,30 @@ func (v *StringValidator) Validate(ctx *ValidationContext, value any) map[string
 	// NotIn
 	if len(v.notIn) > 0 && contains(v.notIn, str) {
 		errors[fieldPath] = append(errors[fieldPath], v.msg("notIn", fmt.Sprintf("%s must not be one of: %s", fieldName, strings.Join(v.notIn, ", "))))
+	}
+
+	// SameAs - cross-field equality check
+	if v.sameAs != "" {
+		otherValue := lookupPath(ctx.RootData, v.sameAs)
+		if otherValue.Exists() {
+			if otherStr, ok := otherValue.Value().(string); ok {
+				if str != otherStr {
+					errors[fieldPath] = append(errors[fieldPath], v.msg("sameAs", fmt.Sprintf("%s must match %s", fieldName, v.sameAs)))
+				}
+			}
+		}
+	}
+
+	// DifferentFrom - cross-field difference check
+	if v.differentFrom != "" {
+		otherValue := lookupPath(ctx.RootData, v.differentFrom)
+		if otherValue.Exists() {
+			if otherStr, ok := otherValue.Value().(string); ok {
+				if str == otherStr {
+					errors[fieldPath] = append(errors[fieldPath], v.msg("differentFrom", fmt.Sprintf("%s must be different from %s", fieldName, v.differentFrom)))
+				}
+			}
+		}
 	}
 
 	// Custom validation

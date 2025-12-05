@@ -8,33 +8,37 @@ import (
 
 // NumberValidator validates numeric values with fluent API
 type NumberValidator[T Number] struct {
-	required       bool
-	requiredIf     func(data DataObject) bool
-	requiredUnless func(data DataObject) bool
-	min            T
-	minSet         bool
-	max            T
-	maxSet         bool
-	minDigits      int
-	minDigitsSet   bool
-	maxDigits      int
-	maxDigitsSet   bool
-	positive       bool
-	negative       bool
-	integer        bool
-	multipleOf     T
-	multipleSet    bool
-	in             []T
-	notIn          []T
-	regex          *regexp.Regexp
-	notRegex       *regexp.Regexp
-	exists         *ExistsRule
-	unique         *UniqueRule
-	customFn       func(value T, lookup Lookup) error
-	messages       map[string]string
-	defaultValue   *T
-	nullable       bool
-	coerce         bool
+	required        bool
+	requiredIf      func(data DataObject) bool
+	requiredUnless  func(data DataObject) bool
+	min             T
+	minSet          bool
+	max             T
+	maxSet          bool
+	minDigits       int
+	minDigitsSet    bool
+	maxDigits       int
+	maxDigitsSet    bool
+	positive        bool
+	negative        bool
+	integer         bool
+	multipleOf      T
+	multipleSet     bool
+	in              []T
+	notIn           []T
+	regex           *regexp.Regexp
+	notRegex        *regexp.Regexp
+	exists          *ExistsRule
+	unique          *UniqueRule
+	customFn        func(value T, lookup Lookup) error
+	messages        map[string]string
+	defaultValue    *T
+	nullable        bool
+	coerce          bool
+	lessThan        string
+	greaterThan     string
+	lessThanOrEq    string
+	greaterThanOrEq string
 }
 
 // Number constraint for numeric types
@@ -202,6 +206,30 @@ func (v *NumberValidator[T]) Coerce() *NumberValidator[T] {
 	return v
 }
 
+// LessThan validates value is less than another field's value
+func (v *NumberValidator[T]) LessThan(fieldPath string) *NumberValidator[T] {
+	v.lessThan = fieldPath
+	return v
+}
+
+// GreaterThan validates value is greater than another field's value
+func (v *NumberValidator[T]) GreaterThan(fieldPath string) *NumberValidator[T] {
+	v.greaterThan = fieldPath
+	return v
+}
+
+// LessThanOrEqual validates value is less than or equal to another field's value
+func (v *NumberValidator[T]) LessThanOrEqual(fieldPath string) *NumberValidator[T] {
+	v.lessThanOrEq = fieldPath
+	return v
+}
+
+// GreaterThanOrEqual validates value is greater than or equal to another field's value
+func (v *NumberValidator[T]) GreaterThanOrEqual(fieldPath string) *NumberValidator[T] {
+	v.greaterThanOrEq = fieldPath
+	return v
+}
+
 // Validate implements Validator interface
 func (v *NumberValidator[T]) Validate(ctx *ValidationContext, value any) map[string][]string {
 	errors := make(map[string][]string)
@@ -316,6 +344,54 @@ func (v *NumberValidator[T]) Validate(ctx *ValidationContext, value any) map[str
 	// NotRegex on string representation
 	if v.notRegex != nil && v.notRegex.MatchString(numStr) {
 		errors[fieldPath] = append(errors[fieldPath], v.msg("notRegex", fmt.Sprintf("%s format is invalid", fieldName)))
+	}
+
+	// LessThan - cross-field comparison
+	if v.lessThan != "" {
+		otherValue := lookupPath(ctx.RootData, v.lessThan)
+		if otherValue.Exists() {
+			if otherNum, ok := toNumber[T](otherValue.Value()); ok {
+				if num >= otherNum {
+					errors[fieldPath] = append(errors[fieldPath], v.msg("lessThan", fmt.Sprintf("%s must be less than %s", fieldName, v.lessThan)))
+				}
+			}
+		}
+	}
+
+	// GreaterThan - cross-field comparison
+	if v.greaterThan != "" {
+		otherValue := lookupPath(ctx.RootData, v.greaterThan)
+		if otherValue.Exists() {
+			if otherNum, ok := toNumber[T](otherValue.Value()); ok {
+				if num <= otherNum {
+					errors[fieldPath] = append(errors[fieldPath], v.msg("greaterThan", fmt.Sprintf("%s must be greater than %s", fieldName, v.greaterThan)))
+				}
+			}
+		}
+	}
+
+	// LessThanOrEqual - cross-field comparison
+	if v.lessThanOrEq != "" {
+		otherValue := lookupPath(ctx.RootData, v.lessThanOrEq)
+		if otherValue.Exists() {
+			if otherNum, ok := toNumber[T](otherValue.Value()); ok {
+				if num > otherNum {
+					errors[fieldPath] = append(errors[fieldPath], v.msg("lessThanOrEqual", fmt.Sprintf("%s must be less than or equal to %s", fieldName, v.lessThanOrEq)))
+				}
+			}
+		}
+	}
+
+	// GreaterThanOrEqual - cross-field comparison
+	if v.greaterThanOrEq != "" {
+		otherValue := lookupPath(ctx.RootData, v.greaterThanOrEq)
+		if otherValue.Exists() {
+			if otherNum, ok := toNumber[T](otherValue.Value()); ok {
+				if num < otherNum {
+					errors[fieldPath] = append(errors[fieldPath], v.msg("greaterThanOrEqual", fmt.Sprintf("%s must be greater than or equal to %s", fieldName, v.greaterThanOrEq)))
+				}
+			}
+		}
 	}
 
 	// Custom validation

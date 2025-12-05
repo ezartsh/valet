@@ -3,6 +3,7 @@ package valet
 import (
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -832,5 +833,256 @@ func BenchmarkSafeParse_Invalid(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		SafeParse(data, schema)
+	}
+}
+
+// ============================================================================
+// TIME VALIDATION BENCHMARKS
+// ============================================================================
+
+func BenchmarkTime_Required(b *testing.B) {
+	ctx := &ValidationContext{
+		RootData: DataObject{},
+		Path:     []string{"created_at"},
+	}
+	validator := Time().Required()
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		validator.Validate(ctx, "2024-01-15T10:30:00Z")
+	}
+}
+
+func BenchmarkTime_AfterBefore(b *testing.B) {
+	ctx := &ValidationContext{
+		RootData: DataObject{},
+		Path:     []string{"event_date"},
+	}
+	validator := Time().Required().AfterNow()
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		validator.Validate(ctx, "2030-12-31T23:59:59Z")
+	}
+}
+
+// ============================================================================
+// TRANSFORM BENCHMARKS
+// ============================================================================
+
+func BenchmarkString_Transform(b *testing.B) {
+	ctx := &ValidationContext{
+		RootData: DataObject{},
+		Path:     []string{"email"},
+	}
+	validator := String().
+		Transform(strings.ToLower).
+		Transform(strings.TrimSpace).
+		Email()
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		validator.Validate(ctx, "  JOHN@EXAMPLE.COM  ")
+	}
+}
+
+// ============================================================================
+// CROSS-FIELD VALIDATION BENCHMARKS
+// ============================================================================
+
+func BenchmarkString_SameAs(b *testing.B) {
+	ctx := &ValidationContext{
+		RootData: DataObject{
+			"password": "secret123",
+		},
+		Path: []string{"password_confirmation"},
+	}
+	validator := String().Required().SameAs("password")
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		validator.Validate(ctx, "secret123")
+	}
+}
+
+func BenchmarkNumeric_LessThan(b *testing.B) {
+	ctx := &ValidationContext{
+		RootData: DataObject{
+			"max_price": float64(1000),
+		},
+		Path: []string{"min_price"},
+	}
+	validator := Float().Required().LessThan("max_price")
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		validator.Validate(ctx, float64(500))
+	}
+}
+
+// ============================================================================
+// CONCURRENT ARRAY VALIDATION BENCHMARKS
+// ============================================================================
+
+func BenchmarkArray_Sequential_SmallArray(b *testing.B) {
+	ctx := &ValidationContext{
+		RootData: DataObject{},
+		Path:     []string{"items"},
+	}
+	validator := Array().Required().Of(String().Required().Min(2))
+	value := []any{"tag1", "tag2", "tag3", "tag4", "tag5"}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		validator.Validate(ctx, value)
+	}
+}
+
+func BenchmarkArray_Concurrent_SmallArray(b *testing.B) {
+	ctx := &ValidationContext{
+		RootData: DataObject{},
+		Path:     []string{"items"},
+	}
+	validator := Array().Required().Of(String().Required().Min(2)).Concurrent(4)
+	value := []any{"tag1", "tag2", "tag3", "tag4", "tag5"}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		validator.Validate(ctx, value)
+	}
+}
+
+func BenchmarkArray_Sequential_LargeArray(b *testing.B) {
+	ctx := &ValidationContext{
+		RootData: DataObject{},
+		Path:     []string{"items"},
+	}
+	validator := Array().Required().Of(String().Required().Email())
+	value := make([]any, 100)
+	for i := range value {
+		value[i] = "user@example.com"
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		validator.Validate(ctx, value)
+	}
+}
+
+func BenchmarkArray_Concurrent_LargeArray(b *testing.B) {
+	ctx := &ValidationContext{
+		RootData: DataObject{},
+		Path:     []string{"items"},
+	}
+	validator := Array().Required().Of(String().Required().Email()).Concurrent(8)
+	value := make([]any, 100)
+	for i := range value {
+		value[i] = "user@example.com"
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		validator.Validate(ctx, value)
+	}
+}
+
+// ============================================================================
+// PATH CACHE BENCHMARKS
+// ============================================================================
+
+func BenchmarkPathCache_Hit(b *testing.B) {
+	// Warm up cache
+	globalPathCache.getSplitPath("user.profile.settings.theme")
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		globalPathCache.getSplitPath("user.profile.settings.theme")
+	}
+}
+
+func BenchmarkPathCache_Miss(b *testing.B) {
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		// Use unique path each time to force cache miss
+		globalPathCache.getSplitPath("path" + string(rune(i%26+'a')) + ".nested")
+	}
+}
+
+// ============================================================================
+// POOL BENCHMARKS
+// ============================================================================
+
+func BenchmarkErrorMapPool_GetPut(b *testing.B) {
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		m := GetErrorMap()
+		m["field"] = []string{"error1", "error2"}
+		PutErrorMap(m)
+	}
+}
+
+func BenchmarkErrorMap_NoPool(b *testing.B) {
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		m := make(map[string][]string, 8)
+		m["field"] = []string{"error1", "error2"}
+		_ = m
+	}
+}
+
+func BenchmarkBuilderPool_GetPut(b *testing.B) {
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		builder := GetBuilder()
+		builder.WriteString("field")
+		builder.WriteByte('.')
+		builder.WriteString("subfield")
+		_ = builder.String()
+		PutBuilder(builder)
+	}
+}
+
+func BenchmarkBuildPath(b *testing.B) {
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		BuildPath("user", "profile", "settings", "theme")
+	}
+}
+
+// ============================================================================
+// LARGE SCHEMA BENCHMARKS
+// ============================================================================
+
+func BenchmarkFullSchema_50Fields(b *testing.B) {
+	data := DataObject{}
+	schema := Schema{}
+
+	// Generate 50 fields
+	for i := 0; i < 50; i++ {
+		fieldName := "field" + string(rune(i%26+'a')) + string(rune(i/26%26+'a'))
+		data[fieldName] = "valid_value_here"
+		schema[fieldName] = String().Required().Min(5).Max(100)
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		Validate(data, schema)
+	}
+}
+
+func BenchmarkFullSchema_100Fields(b *testing.B) {
+	data := DataObject{}
+	schema := Schema{}
+
+	// Generate 100 fields
+	for i := 0; i < 100; i++ {
+		fieldName := "field" + string(rune(i%26+'a')) + string(rune(i/26%26+'a')) + string(rune(i/676%26+'a'))
+		data[fieldName] = "valid_value_here"
+		schema[fieldName] = String().Required().Min(5).Max(100)
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		Validate(data, schema)
 	}
 }
