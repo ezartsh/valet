@@ -300,23 +300,36 @@ func processGroupResult(group *batchGroup, existsMap map[any]bool, err error, er
 	for _, check := range group.checks {
 		exists := existsMap[check.Value]
 
+		// Create message context for resolving dynamic messages
+		// Note: Data is nil here as DB checks don't have access to root data
+		msgCtx := MessageContext{
+			Field: check.Field,
+			Path:  check.Field,
+			Index: extractIndex(check.Field),
+			Value: check.Value,
+		}
+
 		if check.IsUnique {
 			// For unique: should NOT exist (unless it's the ignored value)
 			if exists && check.Value != check.Ignore {
-				msg := check.Message
-				if msg == "" {
-					msg = check.Field + " already exists"
+				var errMsg string
+				if check.Message != nil {
+					errMsg = resolveMessage(check.Message, msgCtx)
+				} else {
+					errMsg = check.Field + " already exists"
 				}
-				errs[check.Field] = append(errs[check.Field], msg)
+				errs[check.Field] = append(errs[check.Field], errMsg)
 			}
 		} else {
 			// For exists: should exist
 			if !exists {
-				msg := check.Message
-				if msg == "" {
-					msg = check.Field + " does not exist"
+				var errMsg string
+				if check.Message != nil {
+					errMsg = resolveMessage(check.Message, msgCtx)
+				} else {
+					errMsg = check.Field + " does not exist"
 				}
-				errs[check.Field] = append(errs[check.Field], msg)
+				errs[check.Field] = append(errs[check.Field], errMsg)
 			}
 		}
 	}

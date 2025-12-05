@@ -10,7 +10,7 @@ type BoolValidator struct {
 	mustBeTrue     bool
 	mustBeFalse    bool
 	customFn       func(value bool, lookup Lookup) error
-	messages       map[string]string
+	messages       map[string]MessageArg
 	defaultValue   *bool
 	nullable       bool
 	coerce         bool
@@ -19,37 +19,52 @@ type BoolValidator struct {
 // Bool creates a new boolean validator
 func Bool() *BoolValidator {
 	return &BoolValidator{
-		messages: make(map[string]string),
+		messages: make(map[string]MessageArg),
 	}
 }
 
 // Required marks the field as required
-func (v *BoolValidator) Required() *BoolValidator {
+func (v *BoolValidator) Required(message ...MessageArg) *BoolValidator {
 	v.required = true
+	if len(message) > 0 {
+		v.messages["required"] = message[0]
+	}
 	return v
 }
 
 // RequiredIf makes field required based on condition
-func (v *BoolValidator) RequiredIf(fn func(data DataObject) bool) *BoolValidator {
+func (v *BoolValidator) RequiredIf(fn func(data DataObject) bool, message ...MessageArg) *BoolValidator {
 	v.requiredIf = fn
+	if len(message) > 0 {
+		v.messages["required"] = message[0]
+	}
 	return v
 }
 
 // RequiredUnless makes field required unless condition is met
-func (v *BoolValidator) RequiredUnless(fn func(data DataObject) bool) *BoolValidator {
+func (v *BoolValidator) RequiredUnless(fn func(data DataObject) bool, message ...MessageArg) *BoolValidator {
 	v.requiredUnless = fn
+	if len(message) > 0 {
+		v.messages["required"] = message[0]
+	}
 	return v
 }
 
 // True requires value to be true
-func (v *BoolValidator) True() *BoolValidator {
+func (v *BoolValidator) True(message ...MessageArg) *BoolValidator {
 	v.mustBeTrue = true
+	if len(message) > 0 {
+		v.messages["true"] = message[0]
+	}
 	return v
 }
 
 // False requires value to be false
-func (v *BoolValidator) False() *BoolValidator {
+func (v *BoolValidator) False(message ...MessageArg) *BoolValidator {
 	v.mustBeFalse = true
+	if len(message) > 0 {
+		v.messages["false"] = message[0]
+	}
 	return v
 }
 
@@ -60,7 +75,7 @@ func (v *BoolValidator) Custom(fn func(value bool, lookup Lookup) error) *BoolVa
 }
 
 // Message sets custom error message for a rule
-func (v *BoolValidator) Message(rule, message string) *BoolValidator {
+func (v *BoolValidator) Message(rule string, message MessageArg) *BoolValidator {
 	v.messages[rule] = message
 	return v
 }
@@ -89,6 +104,15 @@ func (v *BoolValidator) Validate(ctx *ValidationContext, value any) map[string][
 	fieldPath := ctx.FullPath()
 	fieldName := ctx.Path[len(ctx.Path)-1]
 
+	// Create base message context
+	msgCtx := MessageContext{
+		Field: fieldName,
+		Path:  fieldPath,
+		Index: extractIndex(fieldPath),
+		Value: value,
+		Data:  DataAccessor(ctx.RootData),
+	}
+
 	// Handle nil
 	if value == nil {
 		if v.nullable {
@@ -97,13 +121,13 @@ func (v *BoolValidator) Validate(ctx *ValidationContext, value any) map[string][
 		if v.defaultValue != nil {
 			value = *v.defaultValue
 		} else if v.required {
-			errors[fieldPath] = append(errors[fieldPath], v.msg("required", fmt.Sprintf("%s is required", fieldName)))
+			errors[fieldPath] = append(errors[fieldPath], v.msg("required", fmt.Sprintf("%s is required", fieldName), msgCtx))
 			return errors
 		} else if v.requiredIf != nil && v.requiredIf(ctx.RootData) {
-			errors[fieldPath] = append(errors[fieldPath], v.msg("required", fmt.Sprintf("%s is required", fieldName)))
+			errors[fieldPath] = append(errors[fieldPath], v.msg("required", fmt.Sprintf("%s is required", fieldName), msgCtx))
 			return errors
 		} else if v.requiredUnless != nil && !v.requiredUnless(ctx.RootData) {
-			errors[fieldPath] = append(errors[fieldPath], v.msg("required", fmt.Sprintf("%s is required", fieldName)))
+			errors[fieldPath] = append(errors[fieldPath], v.msg("required", fmt.Sprintf("%s is required", fieldName), msgCtx))
 			return errors
 		} else {
 			return nil
@@ -118,18 +142,20 @@ func (v *BoolValidator) Validate(ctx *ValidationContext, value any) map[string][
 	// Type check
 	b, ok := value.(bool)
 	if !ok {
-		errors[fieldPath] = append(errors[fieldPath], v.msg("type", fmt.Sprintf("%s must be a boolean", fieldName)))
+		errors[fieldPath] = append(errors[fieldPath], v.msg("type", fmt.Sprintf("%s must be a boolean", fieldName), msgCtx))
 		return errors
 	}
 
+	msgCtx.Value = b
+
 	// Must be true
 	if v.mustBeTrue && !b {
-		errors[fieldPath] = append(errors[fieldPath], v.msg("true", fmt.Sprintf("%s must be true", fieldName)))
+		errors[fieldPath] = append(errors[fieldPath], v.msg("true", fmt.Sprintf("%s must be true", fieldName), msgCtx))
 	}
 
 	// Must be false
 	if v.mustBeFalse && b {
-		errors[fieldPath] = append(errors[fieldPath], v.msg("false", fmt.Sprintf("%s must be false", fieldName)))
+		errors[fieldPath] = append(errors[fieldPath], v.msg("false", fmt.Sprintf("%s must be false", fieldName), msgCtx))
 	}
 
 	// Custom validation
@@ -138,7 +164,7 @@ func (v *BoolValidator) Validate(ctx *ValidationContext, value any) map[string][
 			return lookupPath(ctx.RootData, path)
 		}
 		if err := v.customFn(b, lookup); err != nil {
-			errors[fieldPath] = append(errors[fieldPath], v.msg("custom", err.Error()))
+			errors[fieldPath] = append(errors[fieldPath], v.msg("custom", err.Error(), msgCtx))
 		}
 	}
 
@@ -148,9 +174,10 @@ func (v *BoolValidator) Validate(ctx *ValidationContext, value any) map[string][
 	return errors
 }
 
-func (v *BoolValidator) msg(rule, defaultMsg string) string {
+func (v *BoolValidator) msg(rule, defaultMsg string, msgCtx MessageContext) string {
 	if msg, ok := v.messages[rule]; ok {
-		return msg
+		msgCtx.Rule = rule
+		return resolveMessage(msg, msgCtx)
 	}
 	return defaultMsg
 }

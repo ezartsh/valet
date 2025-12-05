@@ -58,7 +58,7 @@ type StringValidator struct {
 	exists          *ExistsRule
 	unique          *UniqueRule
 	customFn        func(value string, lookup Lookup) error
-	messages        map[string]string
+	messages        map[string]MessageArg
 	defaultValue    *string
 	nullable        bool
 	transforms      []StringTransformFunc
@@ -85,13 +85,17 @@ type StringValidator struct {
 // String creates a new string validator
 func String() *StringValidator {
 	return &StringValidator{
-		messages: make(map[string]string),
+		messages: make(map[string]MessageArg),
 	}
 }
 
 // Required marks the field as required
-func (v *StringValidator) Required() *StringValidator {
+// Optionally accepts a custom error message (string or MessageFunc)
+func (v *StringValidator) Required(message ...MessageArg) *StringValidator {
 	v.required = true
+	if len(message) > 0 {
+		v.messages["required"] = message[0]
+	}
 	return v
 }
 
@@ -108,37 +112,57 @@ func (v *StringValidator) RequiredUnless(fn func(data DataObject) bool) *StringV
 }
 
 // Min sets minimum length
-func (v *StringValidator) Min(n int) *StringValidator {
+// Optionally accepts a custom error message (string or MessageFunc)
+func (v *StringValidator) Min(n int, message ...MessageArg) *StringValidator {
 	v.min = n
 	v.minSet = true
+	if len(message) > 0 {
+		v.messages["min"] = message[0]
+	}
 	return v
 }
 
 // Max sets maximum length
-func (v *StringValidator) Max(n int) *StringValidator {
+// Optionally accepts a custom error message (string or MessageFunc)
+func (v *StringValidator) Max(n int, message ...MessageArg) *StringValidator {
 	v.max = n
 	v.maxSet = true
+	if len(message) > 0 {
+		v.messages["max"] = message[0]
+	}
 	return v
 }
 
 // Length sets exact length (min = max = n)
-func (v *StringValidator) Length(n int) *StringValidator {
+// Optionally accepts a custom error message (string or MessageFunc)
+func (v *StringValidator) Length(n int, message ...MessageArg) *StringValidator {
 	v.min = n
 	v.max = n
 	v.minSet = true
 	v.maxSet = true
+	if len(message) > 0 {
+		v.messages["length"] = message[0]
+	}
 	return v
 }
 
 // Email validates email format
-func (v *StringValidator) Email() *StringValidator {
+// Optionally accepts a custom error message (string or MessageFunc)
+func (v *StringValidator) Email(message ...MessageArg) *StringValidator {
 	v.email = true
+	if len(message) > 0 {
+		v.messages["email"] = message[0]
+	}
 	return v
 }
 
 // URL validates URL format
-func (v *StringValidator) URL() *StringValidator {
+// Optionally accepts a custom error message (string or MessageFunc)
+func (v *StringValidator) URL(message ...MessageArg) *StringValidator {
 	v.url = true
+	if len(message) > 0 {
+		v.messages["url"] = message[0]
+	}
 	return v
 }
 
@@ -150,14 +174,22 @@ func (v *StringValidator) URLWithOptions(opts UrlOptions) *StringValidator {
 }
 
 // StartsWith validates string starts with prefix
-func (v *StringValidator) StartsWith(prefix string) *StringValidator {
+// Optionally accepts a custom error message (string or MessageFunc)
+func (v *StringValidator) StartsWith(prefix string, message ...MessageArg) *StringValidator {
 	v.startsWith = prefix
+	if len(message) > 0 {
+		v.messages["startsWith"] = message[0]
+	}
 	return v
 }
 
 // EndsWith validates string ends with suffix
-func (v *StringValidator) EndsWith(suffix string) *StringValidator {
+// Optionally accepts a custom error message (string or MessageFunc)
+func (v *StringValidator) EndsWith(suffix string, message ...MessageArg) *StringValidator {
 	v.endsWith = suffix
+	if len(message) > 0 {
+		v.messages["endsWith"] = message[0]
+	}
 	return v
 }
 
@@ -174,8 +206,12 @@ func (v *StringValidator) DoesntEndWith(suffixes ...string) *StringValidator {
 }
 
 // Contains validates string contains substring
-func (v *StringValidator) Contains(substr string) *StringValidator {
+// Optionally accepts a custom error message (string or MessageFunc)
+func (v *StringValidator) Contains(substr string, message ...MessageArg) *StringValidator {
 	v.contains = substr
+	if len(message) > 0 {
+		v.messages["contains"] = message[0]
+	}
 	return v
 }
 
@@ -186,87 +222,143 @@ func (v *StringValidator) Includes(substrs ...string) *StringValidator {
 }
 
 // Alpha validates only letters
-func (v *StringValidator) Alpha() *StringValidator {
+// Optionally accepts a custom error message (string or MessageFunc)
+func (v *StringValidator) Alpha(message ...MessageArg) *StringValidator {
 	v.alpha = true
+	if len(message) > 0 {
+		v.messages["alpha"] = message[0]
+	}
 	return v
 }
 
 // AlphaNumeric validates only letters and numbers
-func (v *StringValidator) AlphaNumeric() *StringValidator {
+// Optionally accepts a custom error message (string or MessageFunc)
+func (v *StringValidator) AlphaNumeric(message ...MessageArg) *StringValidator {
 	v.alphaNumeric = true
+	if len(message) > 0 {
+		v.messages["alphaNumeric"] = message[0]
+	}
 	return v
 }
 
 // ASCII validates string contains only ASCII characters
-func (v *StringValidator) ASCII() *StringValidator {
+// Optionally accepts a custom error message (string or MessageFunc)
+func (v *StringValidator) ASCII(message ...MessageArg) *StringValidator {
 	v.ascii = true
+	if len(message) > 0 {
+		v.messages["ascii"] = message[0]
+	}
 	return v
 }
 
 // UUID validates UUID format (v1-v5)
-func (v *StringValidator) UUID() *StringValidator {
+// Optionally accepts a custom error message (string or MessageFunc)
+func (v *StringValidator) UUID(message ...MessageArg) *StringValidator {
 	v.uuid = true
+	if len(message) > 0 {
+		v.messages["uuid"] = message[0]
+	}
 	return v
 }
 
 // IP validates IPv4 or IPv6 address
-func (v *StringValidator) IP() *StringValidator {
+// Optionally accepts a custom error message (string or MessageFunc)
+func (v *StringValidator) IP(message ...MessageArg) *StringValidator {
 	v.ip = true
+	if len(message) > 0 {
+		v.messages["ip"] = message[0]
+	}
 	return v
 }
 
 // IPv4 validates IPv4 address only
-func (v *StringValidator) IPv4() *StringValidator {
+// Optionally accepts a custom error message (string or MessageFunc)
+func (v *StringValidator) IPv4(message ...MessageArg) *StringValidator {
 	v.ipv4 = true
+	if len(message) > 0 {
+		v.messages["ipv4"] = message[0]
+	}
 	return v
 }
 
 // IPv6 validates IPv6 address only
-func (v *StringValidator) IPv6() *StringValidator {
+// Optionally accepts a custom error message (string or MessageFunc)
+func (v *StringValidator) IPv6(message ...MessageArg) *StringValidator {
 	v.ipv6 = true
+	if len(message) > 0 {
+		v.messages["ipv6"] = message[0]
+	}
 	return v
 }
 
 // JSON validates string is valid JSON
-func (v *StringValidator) JSON() *StringValidator {
+// Optionally accepts a custom error message (string or MessageFunc)
+func (v *StringValidator) JSON(message ...MessageArg) *StringValidator {
 	v.json = true
+	if len(message) > 0 {
+		v.messages["json"] = message[0]
+	}
 	return v
 }
 
 // HexColor validates hex color format (#RGB or #RRGGBB)
-func (v *StringValidator) HexColor() *StringValidator {
+// Optionally accepts a custom error message (string or MessageFunc)
+func (v *StringValidator) HexColor(message ...MessageArg) *StringValidator {
 	v.hexColor = true
+	if len(message) > 0 {
+		v.messages["hexColor"] = message[0]
+	}
 	return v
 }
 
 // Base64 validates string is valid base64 encoded
-func (v *StringValidator) Base64() *StringValidator {
+// Optionally accepts a custom error message (string or MessageFunc)
+func (v *StringValidator) Base64(message ...MessageArg) *StringValidator {
 	v.base64 = true
+	if len(message) > 0 {
+		v.messages["base64"] = message[0]
+	}
 	return v
 }
 
 // MAC validates MAC address format
-func (v *StringValidator) MAC() *StringValidator {
+// Optionally accepts a custom error message (string or MessageFunc)
+func (v *StringValidator) MAC(message ...MessageArg) *StringValidator {
 	v.mac = true
+	if len(message) > 0 {
+		v.messages["mac"] = message[0]
+	}
 	return v
 }
 
 // ULID validates ULID format (26 characters, Crockford base32)
-func (v *StringValidator) ULID() *StringValidator {
+// Optionally accepts a custom error message (string or MessageFunc)
+func (v *StringValidator) ULID(message ...MessageArg) *StringValidator {
 	v.ulid = true
+	if len(message) > 0 {
+		v.messages["ulid"] = message[0]
+	}
 	return v
 }
 
 // AlphaDash validates string contains only alphanumeric, dash, and underscore
-func (v *StringValidator) AlphaDash() *StringValidator {
+// Optionally accepts a custom error message (string or MessageFunc)
+func (v *StringValidator) AlphaDash(message ...MessageArg) *StringValidator {
 	v.alphaDash = true
+	if len(message) > 0 {
+		v.messages["alphaDash"] = message[0]
+	}
 	return v
 }
 
 // Digits validates string is numeric with exact length
-func (v *StringValidator) Digits(length int) *StringValidator {
+// Optionally accepts a custom error message (string or MessageFunc)
+func (v *StringValidator) Digits(length int, message ...MessageArg) *StringValidator {
 	v.digitsLen = length
 	v.digitsSet = true
+	if len(message) > 0 {
+		v.messages["digits"] = message[0]
+	}
 	return v
 }
 
@@ -277,33 +369,57 @@ func (v *StringValidator) Catch(value string) *StringValidator {
 }
 
 // Regex validates against pattern
-func (v *StringValidator) Regex(pattern string) *StringValidator {
+// Optionally accepts a custom error message (string or MessageFunc)
+func (v *StringValidator) Regex(pattern string, message ...MessageArg) *StringValidator {
 	re, err := globalRegexCache.GetOrCompile(pattern)
 	if err == nil {
 		v.regex = re
 	}
 	v.regexPattern = pattern
+	if len(message) > 0 {
+		v.messages["regex"] = message[0]
+	}
 	return v
 }
 
 // NotRegex validates value does NOT match pattern
-func (v *StringValidator) NotRegex(pattern string) *StringValidator {
+// Optionally accepts a custom error message (string or MessageFunc)
+func (v *StringValidator) NotRegex(pattern string, message ...MessageArg) *StringValidator {
 	re, err := globalRegexCache.GetOrCompile(pattern)
 	if err == nil {
 		v.notRegex = re
+	}
+	if len(message) > 0 {
+		v.messages["notRegex"] = message[0]
 	}
 	return v
 }
 
 // In validates value is one of allowed values
+// Note: To add a custom message, use .Message("in", "your message") after this call
 func (v *StringValidator) In(values ...string) *StringValidator {
 	v.in = values
 	return v
 }
 
+// InWithMessage validates value is one of allowed values with a custom message
+func (v *StringValidator) InWithMessage(message MessageArg, values ...string) *StringValidator {
+	v.in = values
+	v.messages["in"] = message
+	return v
+}
+
 // NotIn validates value is not one of disallowed values
+// Note: To add a custom message, use .Message("notIn", "your message") after this call
 func (v *StringValidator) NotIn(values ...string) *StringValidator {
 	v.notIn = values
+	return v
+}
+
+// NotInWithMessage validates value is not one of disallowed values with a custom message
+func (v *StringValidator) NotInWithMessage(message MessageArg, values ...string) *StringValidator {
+	v.notIn = values
+	v.messages["notIn"] = message
 	return v
 }
 
@@ -344,7 +460,8 @@ func (v *StringValidator) Custom(fn func(value string, lookup Lookup) error) *St
 }
 
 // Message sets custom error message for a rule
-func (v *StringValidator) Message(rule, message string) *StringValidator {
+// message can be a string or MessageFunc for dynamic messages
+func (v *StringValidator) Message(rule string, message MessageArg) *StringValidator {
 	v.messages[rule] = message
 	return v
 }
@@ -385,6 +502,15 @@ func (v *StringValidator) Validate(ctx *ValidationContext, value any) map[string
 	fieldPath := ctx.FullPath()
 	fieldName := ctx.Path[len(ctx.Path)-1]
 
+	// Create base message context
+	msgCtx := MessageContext{
+		Field: fieldName,
+		Path:  fieldPath,
+		Index: extractIndex(fieldPath),
+		Value: value,
+		Data:  DataAccessor(ctx.RootData),
+	}
+
 	// Handle nil
 	if value == nil {
 		if v.nullable {
@@ -393,13 +519,13 @@ func (v *StringValidator) Validate(ctx *ValidationContext, value any) map[string
 		if v.defaultValue != nil {
 			value = *v.defaultValue
 		} else if v.required {
-			errors[fieldPath] = append(errors[fieldPath], v.msg("required", fmt.Sprintf("%s is required", fieldName)))
+			errors[fieldPath] = append(errors[fieldPath], v.msg("required", fmt.Sprintf("%s is required", fieldName), msgCtx))
 			return errors
 		} else if v.requiredIf != nil && v.requiredIf(ctx.RootData) {
-			errors[fieldPath] = append(errors[fieldPath], v.msg("required", fmt.Sprintf("%s is required", fieldName)))
+			errors[fieldPath] = append(errors[fieldPath], v.msg("required", fmt.Sprintf("%s is required", fieldName), msgCtx))
 			return errors
 		} else if v.requiredUnless != nil && !v.requiredUnless(ctx.RootData) {
-			errors[fieldPath] = append(errors[fieldPath], v.msg("required", fmt.Sprintf("%s is required", fieldName)))
+			errors[fieldPath] = append(errors[fieldPath], v.msg("required", fmt.Sprintf("%s is required", fieldName), msgCtx))
 			return errors
 		} else {
 			return nil
@@ -409,9 +535,12 @@ func (v *StringValidator) Validate(ctx *ValidationContext, value any) map[string
 	// Type check
 	str, ok := value.(string)
 	if !ok {
-		errors[fieldPath] = append(errors[fieldPath], v.msg("type", fmt.Sprintf("%s must be a string", fieldName)))
+		errors[fieldPath] = append(errors[fieldPath], v.msg("type", fmt.Sprintf("%s must be a string", fieldName), msgCtx))
 		return errors
 	}
+
+	// Update msgCtx with the string value
+	msgCtx.Value = str
 
 	// Transformations
 	if v.trim {
@@ -431,15 +560,15 @@ func (v *StringValidator) Validate(ctx *ValidationContext, value any) map[string
 	// Empty string check for required
 	if str == "" {
 		if v.required {
-			errors[fieldPath] = append(errors[fieldPath], v.msg("required", fmt.Sprintf("%s is required", fieldName)))
+			errors[fieldPath] = append(errors[fieldPath], v.msg("required", fmt.Sprintf("%s is required", fieldName), msgCtx))
 			return errors
 		}
 		if v.requiredIf != nil && v.requiredIf(ctx.RootData) {
-			errors[fieldPath] = append(errors[fieldPath], v.msg("required", fmt.Sprintf("%s is required", fieldName)))
+			errors[fieldPath] = append(errors[fieldPath], v.msg("required", fmt.Sprintf("%s is required", fieldName), msgCtx))
 			return errors
 		}
 		if v.requiredUnless != nil && !v.requiredUnless(ctx.RootData) {
-			errors[fieldPath] = append(errors[fieldPath], v.msg("required", fmt.Sprintf("%s is required", fieldName)))
+			errors[fieldPath] = append(errors[fieldPath], v.msg("required", fmt.Sprintf("%s is required", fieldName), msgCtx))
 			return errors
 		}
 		return nil
@@ -447,86 +576,107 @@ func (v *StringValidator) Validate(ctx *ValidationContext, value any) map[string
 
 	length := utf8.RuneCountInString(str)
 
-	// Min length
+	// Min length (check for "length" message first if min == max, for Length() use case)
 	if v.minSet && length < v.min {
-		errors[fieldPath] = append(errors[fieldPath], v.msg("min", fmt.Sprintf("%s must be at least %d characters", fieldName, v.min)))
+		msgCtx.Param = v.min
+		rule := "min"
+		if v.maxSet && v.min == v.max {
+			if _, ok := v.messages["length"]; ok {
+				rule = "length"
+			}
+		}
+		errors[fieldPath] = append(errors[fieldPath], v.msg(rule, fmt.Sprintf("%s must be at least %d characters", fieldName, v.min), msgCtx))
 	}
 
-	// Max length
+	// Max length (check for "length" message first if min == max, for Length() use case)
 	if v.maxSet && length > v.max {
-		errors[fieldPath] = append(errors[fieldPath], v.msg("max", fmt.Sprintf("%s must be at most %d characters", fieldName, v.max)))
+		msgCtx.Param = v.max
+		rule := "max"
+		if v.minSet && v.min == v.max {
+			if _, ok := v.messages["length"]; ok {
+				rule = "length"
+			}
+		}
+		errors[fieldPath] = append(errors[fieldPath], v.msg(rule, fmt.Sprintf("%s must be at most %d characters", fieldName, v.max), msgCtx))
 	}
 
 	// Email
 	if v.email && !isValidEmail(str) {
-		errors[fieldPath] = append(errors[fieldPath], v.msg("email", fmt.Sprintf("%s must be a valid email", fieldName)))
+		errors[fieldPath] = append(errors[fieldPath], v.msg("email", fmt.Sprintf("%s must be a valid email", fieldName), msgCtx))
 	}
 
 	// URL
 	if v.url {
 		if !isValidURL(str) {
-			errors[fieldPath] = append(errors[fieldPath], v.msg("url", fmt.Sprintf("%s must be a valid URL", fieldName)))
+			errors[fieldPath] = append(errors[fieldPath], v.msg("url", fmt.Sprintf("%s must be a valid URL", fieldName), msgCtx))
 		} else if v.urlOptions != nil {
 			u, _ := url.Parse(str)
 			if v.urlOptions.Http && !v.urlOptions.Https && u.Scheme != "http" {
-				errors[fieldPath] = append(errors[fieldPath], v.msg("url", fmt.Sprintf("%s must be an HTTP URL", fieldName)))
+				errors[fieldPath] = append(errors[fieldPath], v.msg("url", fmt.Sprintf("%s must be an HTTP URL", fieldName), msgCtx))
 			} else if v.urlOptions.Https && !v.urlOptions.Http && u.Scheme != "https" {
-				errors[fieldPath] = append(errors[fieldPath], v.msg("url", fmt.Sprintf("%s must be an HTTPS URL", fieldName)))
+				errors[fieldPath] = append(errors[fieldPath], v.msg("url", fmt.Sprintf("%s must be an HTTPS URL", fieldName), msgCtx))
 			} else if v.urlOptions.Http && v.urlOptions.Https && u.Scheme != "http" && u.Scheme != "https" {
-				errors[fieldPath] = append(errors[fieldPath], v.msg("url", fmt.Sprintf("%s must be an HTTP or HTTPS URL", fieldName)))
+				errors[fieldPath] = append(errors[fieldPath], v.msg("url", fmt.Sprintf("%s must be an HTTP or HTTPS URL", fieldName), msgCtx))
 			}
 		}
 	}
 
 	// StartsWith
 	if v.startsWith != "" && !strings.HasPrefix(str, v.startsWith) {
-		errors[fieldPath] = append(errors[fieldPath], v.msg("startsWith", fmt.Sprintf("%s must start with %s", fieldName, v.startsWith)))
+		msgCtx.Param = v.startsWith
+		errors[fieldPath] = append(errors[fieldPath], v.msg("startsWith", fmt.Sprintf("%s must start with %s", fieldName, v.startsWith), msgCtx))
 	}
 
 	// EndsWith
 	if v.endsWith != "" && !strings.HasSuffix(str, v.endsWith) {
-		errors[fieldPath] = append(errors[fieldPath], v.msg("endsWith", fmt.Sprintf("%s must end with %s", fieldName, v.endsWith)))
+		msgCtx.Param = v.endsWith
+		errors[fieldPath] = append(errors[fieldPath], v.msg("endsWith", fmt.Sprintf("%s must end with %s", fieldName, v.endsWith), msgCtx))
 	}
 
 	// Contains
 	if v.contains != "" && !strings.Contains(str, v.contains) {
-		errors[fieldPath] = append(errors[fieldPath], v.msg("contains", fmt.Sprintf("%s must contain %s", fieldName, v.contains)))
+		msgCtx.Param = v.contains
+		errors[fieldPath] = append(errors[fieldPath], v.msg("contains", fmt.Sprintf("%s must contain %s", fieldName, v.contains), msgCtx))
 	}
 
 	// Alpha
 	if v.alpha && !isAlpha(str) {
-		errors[fieldPath] = append(errors[fieldPath], v.msg("alpha", fmt.Sprintf("%s must contain only letters", fieldName)))
+		errors[fieldPath] = append(errors[fieldPath], v.msg("alpha", fmt.Sprintf("%s must contain only letters", fieldName), msgCtx))
 	}
 
 	// AlphaNumeric
 	if v.alphaNumeric && !isAlphaNumeric(str) {
-		errors[fieldPath] = append(errors[fieldPath], v.msg("alphaNumeric", fmt.Sprintf("%s must contain only letters and numbers", fieldName)))
+		errors[fieldPath] = append(errors[fieldPath], v.msg("alphaNumeric", fmt.Sprintf("%s must contain only letters and numbers", fieldName), msgCtx))
 	}
 
 	// Regex
 	if v.regex != nil && !v.regex.MatchString(str) {
-		errors[fieldPath] = append(errors[fieldPath], v.msg("regex", fmt.Sprintf("%s format is invalid", fieldName)))
+		msgCtx.Param = v.regexPattern
+		errors[fieldPath] = append(errors[fieldPath], v.msg("regex", fmt.Sprintf("%s format is invalid", fieldName), msgCtx))
 	}
 
 	// NotRegex
 	if v.notRegex != nil && v.notRegex.MatchString(str) {
-		errors[fieldPath] = append(errors[fieldPath], v.msg("notRegex", fmt.Sprintf("%s format is invalid", fieldName)))
+		errors[fieldPath] = append(errors[fieldPath], v.msg("notRegex", fmt.Sprintf("%s format is invalid", fieldName), msgCtx))
 	}
 
 	// In
 	if len(v.in) > 0 && !contains(v.in, str) {
-		errors[fieldPath] = append(errors[fieldPath], v.msg("in", fmt.Sprintf("%s must be one of: %s", fieldName, strings.Join(v.in, ", "))))
+		msgCtx.Param = v.in
+		errors[fieldPath] = append(errors[fieldPath], v.msg("in", fmt.Sprintf("%s must be one of: %s", fieldName, strings.Join(v.in, ", ")), msgCtx))
 	}
 
 	// NotIn
 	if len(v.notIn) > 0 && contains(v.notIn, str) {
-		errors[fieldPath] = append(errors[fieldPath], v.msg("notIn", fmt.Sprintf("%s must not be one of: %s", fieldName, strings.Join(v.notIn, ", "))))
+		msgCtx.Param = v.notIn
+		errors[fieldPath] = append(errors[fieldPath], v.msg("notIn", fmt.Sprintf("%s must not be one of: %s", fieldName, strings.Join(v.notIn, ", ")), msgCtx))
 	}
 
 	// DoesntStartWith (array of prefixes)
 	for _, prefix := range v.doesntStartWith {
 		if strings.HasPrefix(str, prefix) {
-			errors[fieldPath] = append(errors[fieldPath], v.msg("doesntStartWith", fmt.Sprintf("%s must not start with %s", fieldName, prefix)))
+			msgCtx.Param = v.doesntStartWith
+			errors[fieldPath] = append(errors[fieldPath], v.msg("doesntStartWith", fmt.Sprintf("%s must not start with %s", fieldName, prefix), msgCtx))
 			break
 		}
 	}
@@ -534,7 +684,8 @@ func (v *StringValidator) Validate(ctx *ValidationContext, value any) map[string
 	// DoesntEndWith (array of suffixes)
 	for _, suffix := range v.doesntEndWith {
 		if strings.HasSuffix(str, suffix) {
-			errors[fieldPath] = append(errors[fieldPath], v.msg("doesntEndWith", fmt.Sprintf("%s must not end with %s", fieldName, suffix)))
+			msgCtx.Param = v.doesntEndWith
+			errors[fieldPath] = append(errors[fieldPath], v.msg("doesntEndWith", fmt.Sprintf("%s must not end with %s", fieldName, suffix), msgCtx))
 			break
 		}
 	}
@@ -542,68 +693,70 @@ func (v *StringValidator) Validate(ctx *ValidationContext, value any) map[string
 	// Includes (must contain all substrings)
 	for _, substr := range v.includes {
 		if !strings.Contains(str, substr) {
-			errors[fieldPath] = append(errors[fieldPath], v.msg("includes", fmt.Sprintf("%s must contain %s", fieldName, substr)))
+			msgCtx.Param = v.includes
+			errors[fieldPath] = append(errors[fieldPath], v.msg("includes", fmt.Sprintf("%s must contain %s", fieldName, substr), msgCtx))
 		}
 	}
 
 	// UUID
 	if v.uuid && !isValidUUID(str) {
-		errors[fieldPath] = append(errors[fieldPath], v.msg("uuid", fmt.Sprintf("%s must be a valid UUID", fieldName)))
+		errors[fieldPath] = append(errors[fieldPath], v.msg("uuid", fmt.Sprintf("%s must be a valid UUID", fieldName), msgCtx))
 	}
 
 	// IP (v4 or v6)
 	if v.ip && !isValidIP(str) {
-		errors[fieldPath] = append(errors[fieldPath], v.msg("ip", fmt.Sprintf("%s must be a valid IP address", fieldName)))
+		errors[fieldPath] = append(errors[fieldPath], v.msg("ip", fmt.Sprintf("%s must be a valid IP address", fieldName), msgCtx))
 	}
 
 	// IPv4 only
 	if v.ipv4 && !isValidIPv4(str) {
-		errors[fieldPath] = append(errors[fieldPath], v.msg("ipv4", fmt.Sprintf("%s must be a valid IPv4 address", fieldName)))
+		errors[fieldPath] = append(errors[fieldPath], v.msg("ipv4", fmt.Sprintf("%s must be a valid IPv4 address", fieldName), msgCtx))
 	}
 
 	// IPv6 only
 	if v.ipv6 && !isValidIPv6(str) {
-		errors[fieldPath] = append(errors[fieldPath], v.msg("ipv6", fmt.Sprintf("%s must be a valid IPv6 address", fieldName)))
+		errors[fieldPath] = append(errors[fieldPath], v.msg("ipv6", fmt.Sprintf("%s must be a valid IPv6 address", fieldName), msgCtx))
 	}
 
 	// JSON
 	if v.json && !isValidJSON(str) {
-		errors[fieldPath] = append(errors[fieldPath], v.msg("json", fmt.Sprintf("%s must be valid JSON", fieldName)))
+		errors[fieldPath] = append(errors[fieldPath], v.msg("json", fmt.Sprintf("%s must be valid JSON", fieldName), msgCtx))
 	}
 
 	// HexColor
 	if v.hexColor && !isValidHexColor(str) {
-		errors[fieldPath] = append(errors[fieldPath], v.msg("hexColor", fmt.Sprintf("%s must be a valid hex color", fieldName)))
+		errors[fieldPath] = append(errors[fieldPath], v.msg("hexColor", fmt.Sprintf("%s must be a valid hex color", fieldName), msgCtx))
 	}
 
 	// ASCII
 	if v.ascii && !isASCII(str) {
-		errors[fieldPath] = append(errors[fieldPath], v.msg("ascii", fmt.Sprintf("%s must contain only ASCII characters", fieldName)))
+		errors[fieldPath] = append(errors[fieldPath], v.msg("ascii", fmt.Sprintf("%s must contain only ASCII characters", fieldName), msgCtx))
 	}
 
 	// Base64
 	if v.base64 && !isValidBase64(str) {
-		errors[fieldPath] = append(errors[fieldPath], v.msg("base64", fmt.Sprintf("%s must be valid base64", fieldName)))
+		errors[fieldPath] = append(errors[fieldPath], v.msg("base64", fmt.Sprintf("%s must be valid base64", fieldName), msgCtx))
 	}
 
 	// MAC address
 	if v.mac && !isValidMAC(str) {
-		errors[fieldPath] = append(errors[fieldPath], v.msg("mac", fmt.Sprintf("%s must be a valid MAC address", fieldName)))
+		errors[fieldPath] = append(errors[fieldPath], v.msg("mac", fmt.Sprintf("%s must be a valid MAC address", fieldName), msgCtx))
 	}
 
 	// ULID
 	if v.ulid && !isValidULID(str) {
-		errors[fieldPath] = append(errors[fieldPath], v.msg("ulid", fmt.Sprintf("%s must be a valid ULID", fieldName)))
+		errors[fieldPath] = append(errors[fieldPath], v.msg("ulid", fmt.Sprintf("%s must be a valid ULID", fieldName), msgCtx))
 	}
 
 	// AlphaDash (letters, numbers, dashes, underscores)
 	if v.alphaDash && !isAlphaDash(str) {
-		errors[fieldPath] = append(errors[fieldPath], v.msg("alphaDash", fmt.Sprintf("%s must contain only letters, numbers, dashes, and underscores", fieldName)))
+		errors[fieldPath] = append(errors[fieldPath], v.msg("alphaDash", fmt.Sprintf("%s must contain only letters, numbers, dashes, and underscores", fieldName), msgCtx))
 	}
 
 	// Digits (exact length numeric string)
 	if v.digitsSet && !isDigits(str, v.digitsLen) {
-		errors[fieldPath] = append(errors[fieldPath], v.msg("digits", fmt.Sprintf("%s must be exactly %d digits", fieldName, v.digitsLen)))
+		msgCtx.Param = v.digitsLen
+		errors[fieldPath] = append(errors[fieldPath], v.msg("digits", fmt.Sprintf("%s must be exactly %d digits", fieldName, v.digitsLen), msgCtx))
 	}
 
 	// SameAs - cross-field equality check
@@ -612,7 +765,8 @@ func (v *StringValidator) Validate(ctx *ValidationContext, value any) map[string
 		if otherValue.Exists() {
 			if otherStr, ok := otherValue.Value().(string); ok {
 				if str != otherStr {
-					errors[fieldPath] = append(errors[fieldPath], v.msg("sameAs", fmt.Sprintf("%s must match %s", fieldName, v.sameAs)))
+					msgCtx.Param = v.sameAs
+					errors[fieldPath] = append(errors[fieldPath], v.msg("sameAs", fmt.Sprintf("%s must match %s", fieldName, v.sameAs), msgCtx))
 				}
 			}
 		}
@@ -624,7 +778,8 @@ func (v *StringValidator) Validate(ctx *ValidationContext, value any) map[string
 		if otherValue.Exists() {
 			if otherStr, ok := otherValue.Value().(string); ok {
 				if str == otherStr {
-					errors[fieldPath] = append(errors[fieldPath], v.msg("differentFrom", fmt.Sprintf("%s must be different from %s", fieldName, v.differentFrom)))
+					msgCtx.Param = v.differentFrom
+					errors[fieldPath] = append(errors[fieldPath], v.msg("differentFrom", fmt.Sprintf("%s must be different from %s", fieldName, v.differentFrom), msgCtx))
 				}
 			}
 		}
@@ -636,7 +791,7 @@ func (v *StringValidator) Validate(ctx *ValidationContext, value any) map[string
 			return lookupPath(ctx.RootData, path)
 		}
 		if err := v.customFn(str, lookup); err != nil {
-			errors[fieldPath] = append(errors[fieldPath], v.msg("custom", err.Error()))
+			errors[fieldPath] = append(errors[fieldPath], v.msg("custom", err.Error(), msgCtx))
 		}
 	}
 
@@ -679,9 +834,10 @@ func (v *StringValidator) GetDBChecks(fieldPath string, value any) []DBCheck {
 	return checks
 }
 
-func (v *StringValidator) msg(rule, defaultMsg string) string {
+func (v *StringValidator) msg(rule, defaultMsg string, msgCtx MessageContext) string {
 	if msg, ok := v.messages[rule]; ok {
-		return msg
+		msgCtx.Rule = rule
+		return resolveMessage(msg, msgCtx)
 	}
 	return defaultMsg
 }

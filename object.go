@@ -11,33 +11,42 @@ type ObjectValidator struct {
 	strict         bool // Fail on unknown keys
 	passthrough    bool // Allow unknown keys (default)
 	customFn       func(value DataObject, lookup Lookup) error
-	messages       map[string]string
+	messages       map[string]MessageArg
 	nullable       bool
 }
 
 // Object creates a new object validator
 func Object() *ObjectValidator {
 	return &ObjectValidator{
-		messages:    make(map[string]string),
+		messages:    make(map[string]MessageArg),
 		passthrough: true,
 	}
 }
 
 // Required marks the field as required
-func (v *ObjectValidator) Required() *ObjectValidator {
+func (v *ObjectValidator) Required(message ...MessageArg) *ObjectValidator {
 	v.required = true
+	if len(message) > 0 {
+		v.messages["required"] = message[0]
+	}
 	return v
 }
 
 // RequiredIf makes field required based on condition
-func (v *ObjectValidator) RequiredIf(fn func(data DataObject) bool) *ObjectValidator {
+func (v *ObjectValidator) RequiredIf(fn func(data DataObject) bool, message ...MessageArg) *ObjectValidator {
 	v.requiredIf = fn
+	if len(message) > 0 {
+		v.messages["required"] = message[0]
+	}
 	return v
 }
 
 // RequiredUnless makes field required unless condition is met
-func (v *ObjectValidator) RequiredUnless(fn func(data DataObject) bool) *ObjectValidator {
+func (v *ObjectValidator) RequiredUnless(fn func(data DataObject) bool, message ...MessageArg) *ObjectValidator {
 	v.requiredUnless = fn
+	if len(message) > 0 {
+		v.messages["required"] = message[0]
+	}
 	return v
 }
 
@@ -53,9 +62,12 @@ func (v *ObjectValidator) Item(schema Schema) *ObjectValidator {
 }
 
 // Strict fails validation if unknown keys are present
-func (v *ObjectValidator) Strict() *ObjectValidator {
+func (v *ObjectValidator) Strict(message ...MessageArg) *ObjectValidator {
 	v.strict = true
 	v.passthrough = false
+	if len(message) > 0 {
+		v.messages["strict"] = message[0]
+	}
 	return v
 }
 
@@ -74,7 +86,7 @@ func (v *ObjectValidator) Pick(fields ...string) *ObjectValidator {
 		strict:      v.strict,
 		passthrough: v.passthrough,
 		customFn:    v.customFn,
-		messages:    make(map[string]string),
+		messages:    make(map[string]MessageArg),
 		nullable:    v.nullable,
 		schema:      make(Schema),
 	}
@@ -102,7 +114,7 @@ func (v *ObjectValidator) Omit(fields ...string) *ObjectValidator {
 		strict:      v.strict,
 		passthrough: v.passthrough,
 		customFn:    v.customFn,
-		messages:    make(map[string]string),
+		messages:    make(map[string]MessageArg),
 		nullable:    v.nullable,
 		schema:      make(Schema),
 	}
@@ -137,7 +149,7 @@ func (v *ObjectValidator) Partial() *ObjectValidator {
 		strict:      v.strict,
 		passthrough: v.passthrough,
 		customFn:    v.customFn,
-		messages:    make(map[string]string),
+		messages:    make(map[string]MessageArg),
 		nullable:    v.nullable,
 		schema:      make(Schema),
 	}
@@ -163,7 +175,7 @@ func (v *ObjectValidator) Extend(additional Schema) *ObjectValidator {
 		strict:      v.strict,
 		passthrough: v.passthrough,
 		customFn:    v.customFn,
-		messages:    make(map[string]string),
+		messages:    make(map[string]MessageArg),
 		nullable:    v.nullable,
 		schema:      make(Schema),
 	}
@@ -194,7 +206,7 @@ func (v *ObjectValidator) Merge(other *ObjectValidator) *ObjectValidator {
 		strict:      v.strict || other.strict,
 		passthrough: v.passthrough && other.passthrough,
 		customFn:    v.customFn,
-		messages:    make(map[string]string),
+		messages:    make(map[string]MessageArg),
 		nullable:    v.nullable && other.nullable,
 		schema:      make(Schema),
 	}
@@ -229,7 +241,7 @@ func (v *ObjectValidator) Custom(fn func(value DataObject, lookup Lookup) error)
 }
 
 // Message sets custom error message for a rule
-func (v *ObjectValidator) Message(rule, message string) *ObjectValidator {
+func (v *ObjectValidator) Message(rule string, message MessageArg) *ObjectValidator {
 	v.messages[rule] = message
 	return v
 }
@@ -249,21 +261,33 @@ func (v *ObjectValidator) Validate(ctx *ValidationContext, value any) map[string
 		fieldName = ctx.Path[len(ctx.Path)-1]
 	}
 
+	// Create message context
+	msgCtx := MessageContext{
+		Field: fieldName,
+		Path:  fieldPath,
+		Index: extractIndex(fieldPath),
+		Value: value,
+		Data:  DataAccessor(ctx.RootData),
+	}
+
 	// Handle nil
 	if value == nil {
 		if v.nullable {
 			return nil
 		}
 		if v.required {
-			errors[fieldPath] = append(errors[fieldPath], v.msg("required", fmt.Sprintf("%s is required", fieldName)))
+			msgCtx.Rule = "required"
+			errors[fieldPath] = append(errors[fieldPath], v.msg("required", fmt.Sprintf("%s is required", fieldName), msgCtx))
 			return errors
 		}
 		if v.requiredIf != nil && v.requiredIf(ctx.RootData) {
-			errors[fieldPath] = append(errors[fieldPath], v.msg("required", fmt.Sprintf("%s is required", fieldName)))
+			msgCtx.Rule = "required"
+			errors[fieldPath] = append(errors[fieldPath], v.msg("required", fmt.Sprintf("%s is required", fieldName), msgCtx))
 			return errors
 		}
 		if v.requiredUnless != nil && !v.requiredUnless(ctx.RootData) {
-			errors[fieldPath] = append(errors[fieldPath], v.msg("required", fmt.Sprintf("%s is required", fieldName)))
+			msgCtx.Rule = "required"
+			errors[fieldPath] = append(errors[fieldPath], v.msg("required", fmt.Sprintf("%s is required", fieldName), msgCtx))
 			return errors
 		}
 		return nil
@@ -272,7 +296,8 @@ func (v *ObjectValidator) Validate(ctx *ValidationContext, value any) map[string
 	// Type check
 	obj, ok := value.(map[string]any)
 	if !ok {
-		errors[fieldPath] = append(errors[fieldPath], v.msg("type", fmt.Sprintf("%s must be an object", fieldName)))
+		msgCtx.Rule = "type"
+		errors[fieldPath] = append(errors[fieldPath], v.msg("type", fmt.Sprintf("%s must be an object", fieldName), msgCtx))
 		return errors
 	}
 
@@ -280,7 +305,9 @@ func (v *ObjectValidator) Validate(ctx *ValidationContext, value any) map[string
 	if v.strict && v.schema != nil {
 		for key := range obj {
 			if _, exists := v.schema[key]; !exists {
-				errors[fieldPath] = append(errors[fieldPath], v.msg("strict", fmt.Sprintf("unknown field: %s", key)))
+				msgCtx.Rule = "strict"
+				msgCtx.Param = key
+				errors[fieldPath] = append(errors[fieldPath], v.msg("strict", fmt.Sprintf("unknown field: %s", key), msgCtx))
 			}
 		}
 	}
@@ -310,7 +337,8 @@ func (v *ObjectValidator) Validate(ctx *ValidationContext, value any) map[string
 			return lookupPath(ctx.RootData, path)
 		}
 		if err := v.customFn(obj, lookup); err != nil {
-			errors[fieldPath] = append(errors[fieldPath], v.msg("custom", err.Error()))
+			msgCtx.Rule = "custom"
+			errors[fieldPath] = append(errors[fieldPath], v.msg("custom", err.Error(), msgCtx))
 		}
 	}
 
@@ -320,9 +348,9 @@ func (v *ObjectValidator) Validate(ctx *ValidationContext, value any) map[string
 	return errors
 }
 
-func (v *ObjectValidator) msg(rule, defaultMsg string) string {
+func (v *ObjectValidator) msg(rule, defaultMsg string, msgCtx MessageContext) string {
 	if msg, ok := v.messages[rule]; ok {
-		return msg
+		return resolveMessage(msg, msgCtx)
 	}
 	return defaultMsg
 }

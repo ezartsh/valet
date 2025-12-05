@@ -48,18 +48,20 @@ func PutBuilder(b *strings.Builder) {
 // String slice pool for path building
 var stringSlicePool = sync.Pool{
 	New: func() any {
-		return make([]string, 0, 8)
+		s := make([]string, 0, 8)
+		return &s
 	},
 }
 
 // GetStringSlice retrieves a string slice from the pool
 func GetStringSlice() []string {
-	return stringSlicePool.Get().([]string)[:0]
+	return (*stringSlicePool.Get().(*[]string))[:0]
 }
 
 // PutStringSlice returns a string slice to the pool
 func PutStringSlice(s []string) {
-	stringSlicePool.Put(s[:0])
+	s = s[:0]
+	stringSlicePool.Put(&s)
 }
 
 // BuildPath efficiently builds a dot-notation path using pooled builder

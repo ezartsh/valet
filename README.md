@@ -3,9 +3,29 @@
 [![Go Reference](https://pkg.go.dev/badge/github.com/ezartsh/valet.svg)](https://pkg.go.dev/github.com/ezartsh/valet)
 [![Go Report Card](https://goreportcard.com/badge/github.com/ezartsh/valet)](https://goreportcard.com/report/github.com/ezartsh/valet)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Coverage](https://img.shields.io/badge/coverage-86.7%25-brightgreen)](https://github.com/ezartsh/valet)
+[![Coverage](https://img.shields.io/badge/coverage-81.7%25-brightgreen)](https://github.com/ezartsh/valet)
 
 A high-performance, Zod-inspired validation library for Go with a fluent builder API. Works with dynamic map data (`map[string]any`) - perfect for validating JSON payloads, API requests, and configuration data without requiring pre-defined structs.
+
+## Table of Contents
+
+- [Features](#features)
+- [Requirements](#requirements)
+- [Installation](#installation)
+- [Quick Start](#quick-start)
+- [Available Validation Rules](#available-validation-rules)
+  - [String Rules](#string-rules)
+  - [Number Rules](#number-rules)
+  - [Boolean Rules](#boolean-rules)
+  - [Array Rules](#array-rules)
+  - [Object Rules](#object-rules)
+  - [File Rules](#file-rules)
+  - [Schema Helpers](#schema-helpers)
+- [Custom Error Messages](#custom-error-messages)
+- [Database Validation](#database-validation)
+- [Performance](#performance)
+- [Examples](#examples)
+- [License](#license)
 
 ## Features
 
@@ -16,7 +36,7 @@ A high-performance, Zod-inspired validation library for Go with a fluent builder
 - **Nested Validation** - Validate deeply nested objects and arrays
 - **Conditional Validation** - `RequiredIf` and `RequiredUnless` rules
 - **Custom Validators** - Add your own validation logic
-- **Custom Error Messages** - Override default messages per field
+- **Custom Error Messages** - Inline messages with dynamic template functions
 - **Integrated DB Validation** - Exists/Unique checks with batched queries (N+1 prevention)
 - **Multiple DB Adapters** - Support for database/sql, GORM, sqlx, Bun, and custom implementations
 - **Parallel DB Queries** - Multi-table checks execute concurrently
@@ -41,7 +61,7 @@ package main
 import (
     "encoding/json"
     "fmt"
-    valet "github.com/ezartsh/valet"
+    "github.com/ezartsh/valet"
 )
 
 func main() {
@@ -55,11 +75,11 @@ func main() {
     var data map[string]any
     json.Unmarshal(jsonData, &data)
     
-    // Define validation schema with fluent API
+    // Define validation schema
     schema := valet.Schema{
         "name":  valet.String().Required().Min(2).Max(100),
         "email": valet.String().Required().Email(),
-        "age":   valet.Float().Required().Min(18).Max(120),
+        "age":   valet.Num[float64]().Required().Min(18).Max(120),
     }
     
     // Validate
@@ -71,25 +91,303 @@ func main() {
 }
 ```
 
-## API Reference
+---
 
-### Validation Functions
+## Available Validation Rules
+
+### String Rules
+
+| Rule | Description |
+|------|-------------|
+| `Required()` | Field must be present and non-empty |
+| `RequiredIf(fn)` | Required if condition is met |
+| `RequiredUnless(fn)` | Required unless condition is met |
+| `Min(n)` | Minimum string length |
+| `Max(n)` | Maximum string length |
+| `Length(n)` | Exact string length |
+| `Email()` | Valid email format |
+| `URL()` | Valid URL format |
+| `UUID()` | Valid UUID format |
+| `ULID()` | Valid ULID format |
+| `IP()` | Valid IP address (IPv4 or IPv6) |
+| `IPv4()` | Valid IPv4 address |
+| `IPv6()` | Valid IPv6 address |
+| `MAC()` | Valid MAC address |
+| `JSON()` | Valid JSON string |
+| `Base64()` | Valid Base64 encoded string |
+| `HexColor()` | Valid hex color code |
+| `Alpha()` | Contains only letters |
+| `AlphaNumeric()` | Contains only letters and numbers |
+| `AlphaDash()` | Letters, numbers, dashes, underscores |
+| `ASCII()` | Contains only ASCII characters |
+| `Digits(n)` | Contains only digits with exact length |
+| `Regex(pattern)` | Must match regex pattern |
+| `NotRegex(pattern)` | Must NOT match regex pattern |
+| `In(values...)` | Must be one of specified values |
+| `NotIn(values...)` | Must NOT be one of specified values |
+| `StartsWith(prefix)` | Must start with prefix |
+| `EndsWith(suffix)` | Must end with suffix |
+| `DoesntStartWith(prefixes...)` | Must NOT start with any of prefixes |
+| `DoesntEndWith(suffixes...)` | Must NOT end with any of suffixes |
+| `Contains(substr)` | Must contain substring |
+| `Includes(substrs...)` | Must contain all substrings |
+| `SameAs(field)` | Must equal another field's value |
+| `DifferentFrom(field)` | Must differ from another field's value |
+| `Trim()` | Trim whitespace before validation |
+| `Lowercase()` | Convert to lowercase before validation |
+| `Uppercase()` | Convert to uppercase before validation |
+| `Transform(fn)` | Apply custom transformation |
+| `Exists(table, column)` | Value must exist in database |
+| `Unique(table, column, ignore)` | Value must be unique in database |
+| `Custom(fn)` | Custom validation function |
+| `Nullable()` | Allow null values |
+| `Default(value)` | Set default value if nil |
+
+#### String Examples
 
 ```go
-// Basic validation
-err := valet.Validate(data, schema)
-err := valet.Validate(data, schema, valet.Options{AbortEarly: true})
+// Basic validations
+valet.String().Required()
+valet.String().Min(3).Max(100)
+valet.String().Email()
+valet.String().UUID()
 
-// Zod-like aliases
-err := valet.Parse(data, schema)
-data, err := valet.SafeParse(data, schema)
+// With custom messages
+valet.String().Required("Name is required")
+valet.String().Email("Please enter a valid email")
 
-// With database validation
-err := valet.ValidateWithDB(ctx, data, schema, dbChecker)
-data, err := valet.ValidateWithDBContext(ctx, data, schema, opts)
+// Advanced validations
+valet.String().Regex(`^[A-Z]{2}\d{4}$`)
+valet.String().In("draft", "published", "archived")
+valet.String().StartsWith("PRE_")
+
+// Password confirmation
+valet.String().SameAs("password")
+
+// Transformations
+valet.String().Trim().Lowercase().Email()
+
+// Database checks
+valet.String().Unique("users", "email", nil)
+valet.String().Exists("categories", "slug")
 ```
 
-### String Validator
+### Number Rules
+
+Number validators support Go generics. Use `Num[T]()` for any numeric type.
+
+| Rule | Description |
+|------|-------------|
+| `Required()` | Field must be present |
+| `RequiredIf(fn)` | Required if condition is met |
+| `RequiredUnless(fn)` | Required unless condition is met |
+| `Min(n)` | Minimum value |
+| `Max(n)` | Maximum value |
+| `Between(min, max)` | Value must be between min and max |
+| `Positive()` | Must be greater than 0 |
+| `Negative()` | Must be less than 0 |
+| `Integer()` | Must be a whole number |
+| `MultipleOf(n)` | Must be a multiple of value |
+| `Step(n)` | Alias for MultipleOf |
+| `MinDigits(n)` | Minimum number of digits |
+| `MaxDigits(n)` | Maximum number of digits |
+| `LessThan(field)` | Must be less than another field |
+| `GreaterThan(field)` | Must be greater than another field |
+| `LessThanOrEqual(field)` | Must be ≤ another field |
+| `GreaterThanOrEqual(field)` | Must be ≥ another field |
+| `In(values...)` | Must be one of specified values |
+| `NotIn(values...)` | Must NOT be one of specified values |
+| `Exists(table, column)` | Value must exist in database |
+| `Unique(table, column, ignore)` | Value must be unique in database |
+| `Coerce()` | Coerce string to number |
+| `Custom(fn)` | Custom validation function |
+| `Nullable()` | Allow null values |
+| `Default(value)` | Set default value if nil |
+
+#### Number Examples
+
+```go
+// Shorthand constructors
+valet.Float()   // Num[float64]()
+valet.Int()     // Num[int]()
+valet.Int64()   // Num[int64]()
+
+// Basic validations
+valet.Float().Required().Min(0).Max(100)
+valet.Int().Positive()
+valet.Float().Between(0, 1)
+
+// With custom messages
+valet.Int().Min(18, "Must be at least 18 years old")
+
+// Field comparisons
+valet.Float().LessThan("max_price")
+valet.Float().GreaterThan("min_price")
+
+// Database checks
+valet.Int().Exists("products", "id")
+```
+
+### Boolean Rules
+
+| Rule | Description |
+|------|-------------|
+| `Required()` | Field must be present |
+| `RequiredIf(fn)` | Required if condition is met |
+| `RequiredUnless(fn)` | Required unless condition is met |
+| `True()` | Must be true |
+| `False()` | Must be false |
+| `Coerce()` | Coerce string to boolean |
+| `Custom(fn)` | Custom validation function |
+| `Nullable()` | Allow null values |
+| `Default(value)` | Set default value if nil |
+
+#### Boolean Examples
+
+```go
+// Terms acceptance
+valet.Bool().Required().True("You must accept the terms")
+
+// Coerce from string ("true", "1", "yes", "on" -> true)
+valet.Bool().Coerce().Required()
+
+// Default value
+valet.Bool().Default(false)
+```
+
+### Array Rules
+
+| Rule | Description |
+|------|-------------|
+| `Required()` | Field must be present and non-empty |
+| `RequiredIf(fn)` | Required if condition is met |
+| `RequiredUnless(fn)` | Required unless condition is met |
+| `Min(n)` | Minimum array length |
+| `Max(n)` | Maximum array length |
+| `Length(n)` | Exact array length |
+| `Nonempty()` | Array must have at least one element |
+| `Of(validator)` | Validate each element with schema |
+| `Unique()` | All elements must be unique |
+| `Distinct()` | Alias for Unique |
+| `Contains(values...)` | Must contain specified values |
+| `DoesntContain(values...)` | Must NOT contain specified values |
+| `Exists(table, column)` | All elements must exist in database |
+| `Concurrent(workers)` | Enable concurrent element validation |
+| `Custom(fn)` | Custom validation function |
+| `Nullable()` | Allow null values |
+
+#### Array Examples
+
+```go
+// Array of strings (emails)
+valet.Array().Of(valet.String().Email())
+
+// Array of numbers
+valet.Array().Min(1).Of(valet.Float().Positive())
+
+// Array of objects
+valet.Array().Of(valet.Object().Shape(valet.Schema{
+    "product_id": valet.Int().Required().Exists("products", "id"),
+    "quantity":   valet.Int().Required().Positive(),
+}))
+
+// Unique values
+valet.Array().Unique()
+
+// Concurrent validation for large arrays
+valet.Array().Concurrent(4).Of(valet.Object().Shape(schema))
+```
+
+### Object Rules
+
+| Rule | Description |
+|------|-------------|
+| `Required()` | Field must be present |
+| `RequiredIf(fn)` | Required if condition is met |
+| `RequiredUnless(fn)` | Required unless condition is met |
+| `Shape(schema)` | Define nested validation schema |
+| `Strict()` | Fail on unknown keys |
+| `Passthrough()` | Allow unknown keys (default) |
+| `Pick(fields...)` | Create validator with only specified fields |
+| `Omit(fields...)` | Create validator excluding specified fields |
+| `Partial()` | Make all fields optional |
+| `Extend(schema)` | Extend schema with additional fields |
+| `Merge(validator)` | Merge two object validators |
+| `Custom(fn)` | Custom validation function |
+| `Nullable()` | Allow null values |
+
+#### Object Examples
+
+```go
+// Nested object
+valet.Object().Shape(valet.Schema{
+    "street":  valet.String().Required(),
+    "city":    valet.String().Required(),
+    "zip":     valet.String().Required().Digits(5),
+    "country": valet.String().Required().In("US", "CA", "UK"),
+})
+
+// Strict mode (fail on unknown fields)
+valet.Object().Strict().Shape(schema)
+
+// Pick only specific fields
+userSchema.Pick("id", "name")
+
+// Omit fields
+userSchema.Omit("password")
+
+// Make all fields optional (for PATCH requests)
+userSchema.Partial()
+
+// Extend schema
+baseSchema.Extend(valet.Schema{
+    "email": valet.String().Email(),
+})
+```
+
+### File Rules
+
+For validating file uploads (`*multipart.FileHeader`).
+
+| Rule | Description |
+|------|-------------|
+| `Required()` | File must be present |
+| `RequiredIf(fn)` | Required if condition is met |
+| `RequiredUnless(fn)` | Required unless condition is met |
+| `Min(bytes)` | Minimum file size |
+| `Max(bytes)` | Maximum file size |
+| `Mimes(types...)` | Allowed MIME types |
+| `Extensions(exts...)` | Allowed file extensions |
+| `Image()` | Must be an image file |
+| `Dimensions(opts)` | Image dimension constraints |
+| `Custom(fn)` | Custom validation function |
+| `Nullable()` | Allow null values |
+
+#### File Examples
+
+```go
+// Image upload
+valet.File().Required().Image().Max(5 * 1024 * 1024)
+
+// PDF documents
+valet.File().Mimes("application/pdf").Max(10 * 1024 * 1024)
+
+// Image with dimensions
+valet.File().Image().Dimensions(&valet.ImageDimensions{
+    MinWidth:  200,
+    MaxWidth:  2000,
+    MinHeight: 200,
+    MaxHeight: 2000,
+})
+
+// Avatar with aspect ratio
+valet.File().Image().Dimensions(&valet.ImageDimensions{
+    MinWidth: 100,
+    Ratio:    "1/1",  // Square
+})
+```
+
+### Schema Helpers
 
 ```go
 valet.String().
@@ -228,33 +526,125 @@ valet.Array().
     Nullable()
 ```
 
-### File Validator
+### Schema Helpers
+
+Helper functions for common validation patterns.
+
+| Helper | Description |
+|--------|-------------|
+| `Enum(values...)` | Value must be one of predefined options |
+| `EnumInt(values...)` | Integer must be one of predefined options |
+| `Literal(value)` | Value must be exactly the specified value |
+| `Union(validators...)` | Value must match one of multiple validators |
+| `Optional(validator)` | Make any validator optional |
+
+#### Schema Helper Examples
 
 ```go
-valet.File().
-    Required().
-    MaxSize(5 * 1024 * 1024).  // 5MB max
-    MinSize(1024).             // 1KB min
-    MimeTypes("image/jpeg", "image/png", "application/pdf").
-    Extensions(".jpg", ".png", ".pdf").
-    Image().                   // Must be image (jpeg, png, gif, webp)
-    Document().                // Must be document (pdf, doc, docx, etc.)
-    Custom(func(f FileInfo, lookup Lookup) error {
-        // Custom file validation
-        return nil
-    })
+// String enum
+valet.Enum("draft", "published", "archived")
+
+// Integer enum
+valet.EnumInt(1, 2, 3, 4, 5)
+
+// Literal value
+valet.Literal("active")
+
+// Union (accept multiple types)
+valet.Union(
+    valet.String().Email(),
+    valet.String().Regex(`^\+\d{10,15}$`),  // Phone
+)
+
+// Optional
+valet.Optional(valet.String().Email())
 ```
 
-### Database Validation
+---
+
+## Custom Error Messages
+
+Valet supports flexible custom error messages with two approaches:
+
+### Inline String Messages
+
+Pass a string message directly to any validation method:
+
+```go
+valet.String().
+    Required("Name is required").
+    Min(3, "Name must be at least 3 characters").
+    Max(50, "Name cannot exceed 50 characters")
+```
+
+### Dynamic Message Functions
+
+Use `MessageFunc` for dynamic messages with access to validation context:
+
+```go
+valet.String().Required(func(ctx valet.MessageContext) string {
+    return fmt.Sprintf("The %s field is required", ctx.Field)
+})
+```
+
+### MessageContext Fields
+
+The `MessageContext` provides rich context for dynamic messages:
+
+```go
+type MessageContext struct {
+    Field string       // Field name (e.g., "email")
+    Path  string       // Full path (e.g., "users.0.email")
+    Index int          // Array index if inside array (-1 otherwise)
+    Value any          // The actual value being validated
+    Rule  string       // The validation rule that failed
+    Param any          // Rule parameter (e.g., 3 for Min(3))
+    Data  DataAccessor // Root data with Get() method
+}
+```
+
+### Using Data.Get()
+
+Access other fields from the root data in your message:
+
+```go
+valet.String().Required(func(ctx valet.MessageContext) string {
+    userName := ctx.Data.Get("user.name").String()
+    return fmt.Sprintf("Email is required for user %s", userName)
+})
+
+// Access array items
+valet.Float().Positive(func(ctx valet.MessageContext) string {
+    itemName := ctx.Data.Get(fmt.Sprintf("items.%d.name", ctx.Index)).String()
+    return fmt.Sprintf("Price for '%s' must be positive", itemName)
+})
+```
+
+### Using Message() Method
+
+Set messages for specific rules using the `Message()` method:
+
+```go
+valet.String().
+    Required().
+    Email().
+    Message("required", "Please enter your email").
+    Message("email", "Please enter a valid email address")
+```
+
+---
+
+## Database Validation
+
+### Setting Up a DB Checker
 
 #### Using FuncAdapter (Simple)
 
 ```go
-checker := valet.FuncAdapter(func(ctx context.Context, table, column string, values []any, wheres []WhereClause) (map[any]bool, error) {
-    // Query your database
-    // Return map of value -> exists
+checker := valet.FuncAdapter(func(ctx context.Context, table, column string, values []any, wheres []valet.WhereClause) (map[any]bool, error) {
     result := make(map[any]bool)
-    // ... query logic ...
+    // Query your database and populate result
+    // result[value] = true if value exists
     return result, nil
 })
 
@@ -268,19 +658,11 @@ import "database/sql"
 
 db, _ := sql.Open("mysql", "user:password@/dbname")
 checker := valet.NewSQLAdapter(db)
-
-schema := valet.Schema{
-    "email":      valet.String().Required().Email().Unique("users", "email", nil),
-    "category_id": valet.Float().Required().Exists("categories", "id"),
-}
-
-err := valet.ValidateWithDB(ctx, data, schema, checker)
 ```
 
 #### Using GORM Adapter
 
 ```go
-// Implement GormQuerier interface for your GORM instance
 type GormDB struct {
     db *gorm.DB
 }
@@ -295,7 +677,7 @@ checker := valet.NewGormAdapter(&GormDB{db: gormDB})
 #### Using SQLX Adapter
 
 ```go
-db, _ := sqlx.Connect("postgres", "user=foo dbname=bar sslmode=disable")
+db, _ := sqlx.Connect("postgres", dsn)
 checker := valet.NewSQLXAdapter(db)
 ```
 
@@ -307,21 +689,44 @@ db := bun.NewDB(sqldb, pgdialect.New())
 checker := valet.NewBunAdapter(db)
 ```
 
-#### Where Clauses
+### Where Clauses
+
+Add conditions to database checks:
 
 ```go
-// Check exists with conditions
-valet.Float().Exists("products", "id",
+// Equal
+valet.WhereEq("status", "active")
+
+// Not equal
+valet.WhereNot("deleted", true)
+
+// Custom operator
+valet.Where("stock", ">", 0)
+
+// Example usage
+valet.Int().Exists("products", "id",
     valet.WhereEq("status", "active"),
-    valet.WhereNot("deleted", true),
     valet.Where("stock", ">", 0),
 )
-
-// Unique with ignore (for updates)
-valet.String().Unique("users", "email", currentUserEmail)
 ```
 
-### Lookup Function
+### Batched Queries
+
+Valet automatically batches database queries to prevent N+1 problems:
+
+```go
+// This validates 100 items but only makes 1 query per table
+schema := valet.Schema{
+    "items": valet.Array().Of(valet.Object().Shape(valet.Schema{
+        "product_id": valet.Int().Exists("products", "id"),
+        "category":   valet.String().Exists("categories", "slug"),
+    })),
+}
+```
+
+---
+
+## Lookup Function
 
 Access other fields during validation:
 
@@ -341,42 +746,11 @@ valet.Float().Custom(func(v float64, lookup valet.Lookup) error {
     // Get nested value
     city := lookup("address").Get("city").String()
     
-    // Check array
-    if lookup("items").IsArray() {
-        items := lookup("items").Array()
-        // ...
-    }
-    
     return nil
 })
 ```
 
-### Options
-
-```go
-valet.Validate(data, schema, valet.Options{
-    AbortEarly: true,           // Stop on first error
-    DBChecker:  checker,        // Database checker for Exists/Unique
-    Context:    ctx,            // Context for cancellation
-})
-```
-
-### Error Handling
-
-```go
-err := valet.Validate(data, schema)
-if err != nil {
-    // err.Errors is map[string][]string
-    for field, messages := range err.Errors {
-        fmt.Printf("%s: %v\n", field, messages)
-    }
-    
-    // Check if has errors
-    if err.HasErrors() {
-        // ...
-    }
-}
-```
+---
 
 ## Performance
 
@@ -384,45 +758,26 @@ if err != nil {
 
 Tested on Intel Core i7-1355U, Go 1.21+
 
-#### Individual Validators
-
-| Validator | ns/op | B/op | allocs/op |
-|-----------|-------|------|-----------|
-| String_Required | 13.1 | 0 | 0 |
-| String_MinMax | 17.9 | 0 | 0 |
-| String_Email | 347.6 | 0 | 0 |
-| Boolean_Required | 2.9 | 0 | 0 |
-| Object_Required | 2.3 | 0 | 0 |
-| Array_Required | 3.3 | 0 | 0 |
-
-#### DB Validation
-
-| Scenario | ns/op | B/op | allocs/op |
-|----------|-------|------|-----------|
-| Schema Only | 744 | 360 | 11 |
-| Schema + DB Exists | 11,100 | 1,644 | 30 |
-| Schema + DB Unique | 1,065 | 452 | 9 |
-| Batching 10 items | 6,752 | 3,401 | 70 |
-| Batching 100 items | 84,991 | 81,502 | 720 |
-| Multi-table (4 tables) | 20,309 | 2,883 | 51 |
-
-#### Nested Array Objects
-
-| Scenario | ns/op | B/op | allocs/op |
-|----------|-------|------|-----------|
-| 5 items with DB check | 31,904 | 7,585 | 114 |
-| 10 items with nested tags | 76,925 | 38,023 | 329 |
-| 50 items deeply nested | 306,682 | 317,845 | 1,793 |
+| Validator | ns/op | allocs/op |
+|-----------|-------|-----------|
+| String_Required | ~130 | 3 |
+| String_Email | ~535 | 3 |
+| String_UUID | ~783 | 7 |
+| Number_Required | ~262 | 5 |
+| Boolean_Required | ~85 | 2 |
+| Object_Shape | ~1,498 | 14 |
+| Array_Of_Object | ~3,425 | 46 |
 
 ### Performance Optimizations
 
-- **sync.Pool** for object reuse (DB check slices, batch groups, string builders)
+- **sync.Pool** for object reuse
 - **Regex caching** with thread-safe cache
 - **Parallel DB queries** for multi-table checks
 - **Batched queries** to prevent N+1 problem
-- **Pre-allocation** of maps and slices
+- **Pre-compiled regex** for common patterns (UUID, MAC, ULID, etc.)
 - **Zero-allocation** validators for simple checks
-- **Context cancellation** support
+
+---
 
 ## Examples
 
@@ -440,10 +795,9 @@ func CreateUserHandler(w http.ResponseWriter, r *http.Request) {
         "email": valet.String().Required().Email().
             Unique("users", "email", nil),
         "password": valet.String().Required().Min(8).
-            Regex(`[A-Z]`).  // At least one uppercase
-            Regex(`[0-9]`),  // At least one digit
+            Regex(`[A-Z]`, "Must contain uppercase").
+            Regex(`[0-9]`, "Must contain number"),
         "age": valet.Float().Required().Min(18).Max(120),
-        "role": valet.String().Required().In("user", "admin", "moderator"),
     }
     
     if err := valet.ValidateWithDB(r.Context(), data, schema, dbChecker); err != nil {
@@ -456,27 +810,35 @@ func CreateUserHandler(w http.ResponseWriter, r *http.Request) {
 }
 ```
 
-### E-commerce Order Validation
+### E-commerce Order
 
 ```go
 schema := valet.Schema{
-    "customer_id": valet.Float().Required().Exists("users", "id"),
+    "customer_id": valet.Int().Required().Exists("users", "id"),
     "shipping_address": valet.Object().Required().Shape(valet.Schema{
         "street":  valet.String().Required().Min(5),
         "city":    valet.String().Required(),
-        "zip":     valet.String().Required().Regex(`^\d{5}$`),
+        "zip":     valet.String().Required().Digits(5),
         "country": valet.String().Required().In("US", "CA", "UK"),
     }),
     "items": valet.Array().Required().Min(1).Of(valet.Object().Shape(valet.Schema{
-        "product_id": valet.Float().Required().Exists("products", "id",
+        "product_id": valet.Int().Required().Exists("products", "id",
             valet.WhereEq("status", "active"),
         ),
-        "quantity": valet.Float().Required().Positive().Max(100),
-        "price":    valet.Float().Required().Positive(),
+        "quantity": valet.Int().Required().Positive().Max(100),
     })),
-    "coupon_code": valet.String().Exists("coupons", "code",
+    "coupon_code": valet.String().Nullable().Exists("coupons", "code",
         valet.WhereEq("active", true),
     ),
+}
+```
+
+### Password Confirmation
+
+```go
+schema := valet.Schema{
+    "password": valet.String().Required().Min(8),
+    "password_confirmation": valet.String().Required().SameAs("password"),
 }
 ```
 
@@ -486,24 +848,39 @@ schema := valet.Schema{
 schema := valet.Schema{
     "payment_type": valet.String().Required().In("card", "bank", "crypto"),
     
-    // Required only if payment_type is "card"
     "card_number": valet.String().
         RequiredIf(func(d valet.DataObject) bool {
             return d["payment_type"] == "card"
         }).
-        Regex(`^\d{16}$`),
+        Digits(16),
     
-    // Required unless payment_type is "crypto"
-    "billing_address": valet.Object().
-        RequiredUnless(func(d valet.DataObject) bool {
+    "bank_account": valet.String().
+        RequiredIf(func(d valet.DataObject) bool {
+            return d["payment_type"] == "bank"
+        }),
+    
+    "wallet_address": valet.String().
+        RequiredIf(func(d valet.DataObject) bool {
             return d["payment_type"] == "crypto"
-        }).
-        Shape(valet.Schema{
-            "street": valet.String().Required(),
-            "city":   valet.String().Required(),
         }),
 }
 ```
+
+### Dynamic Error Messages with Array Context
+
+```go
+schema := valet.Schema{
+    "items": valet.Array().Of(valet.Object().Shape(valet.Schema{
+        "name": valet.String().Required(),
+        "price": valet.Float().Required().Positive(func(ctx valet.MessageContext) string {
+            name := ctx.Data.Get(fmt.Sprintf("items.%d.name", ctx.Index)).String()
+            return fmt.Sprintf("Price for '%s' must be positive", name)
+        }),
+    })),
+}
+```
+
+---
 
 ## Notes
 
@@ -515,7 +892,7 @@ When parsing JSON in Go, all numbers become `float64`. Use `valet.Float()` for J
 // JSON: {"age": 25}
 // In Go: data["age"] is float64(25)
 schema := valet.Schema{
-    "age": valet.Float().Required().Int(), // Validates as integer
+    "age": valet.Float().Required().Integer(), // Validates as integer
 }
 ```
 
@@ -523,29 +900,7 @@ schema := valet.Schema{
 
 All validators are thread-safe and can be reused across goroutines. The internal caches (regex, sync.Pool) are protected by mutexes.
 
-### DB Adapter Selection
-
-| Adapter | Use Case |
-|---------|----------|
-| `FuncAdapter` | Simple cases, testing, custom implementations |
-| `SQLAdapter` | Standard `database/sql` |
-| `SQLXAdapter` | Using `jmoiron/sqlx` |
-| `GormAdapter` | Using GORM ORM |
-| `BunAdapter` | Using Bun ORM |
-
-### Error Messages
-
-Default error messages can be overridden per field:
-
-```go
-valet.String().
-    Required().
-    Min(5).
-    Email().
-    Message("required", "Please enter your email").
-    Message("min", "Email is too short").
-    Message("email", "Please enter a valid email address")
-```
+---
 
 ## License
 
@@ -560,8 +915,3 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 3. Commit your changes (`git commit -m 'Add some amazing feature'`)
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
-
-## Related Projects
-
-- [go-validet](https://github.com/ezartsh/validet) - Struct-based validation library (original)
-- [Zod](https://github.com/colinhacks/zod) - TypeScript-first schema validation (inspiration)

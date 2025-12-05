@@ -1,6 +1,7 @@
 package valet
 
 import (
+	"strconv"
 	"strings"
 	"sync"
 )
@@ -63,15 +64,17 @@ func lookupPath(data DataObject, path string) LookupResult {
 				return LookupResult{nil, false}
 			}
 			current = val
+		case []any:
+			// Handle array index access
+			idx, err := strconv.Atoi(part)
+			if err != nil || idx < 0 || idx >= len(v) {
+				return LookupResult{nil, false}
+			}
+			current = v[idx]
 		default:
 			return LookupResult{nil, false}
 		}
 	}
 
 	return LookupResult{current, true}
-}
-
-// buildFieldPath creates dot-notation path from path slice
-func buildFieldPath(path []string) string {
-	return strings.Join(path, ".")
 }

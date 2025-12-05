@@ -2,6 +2,7 @@ package valet
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 )
 
@@ -1015,4 +1016,422 @@ func TestStringValidator_ChainedValidators(t *testing.T) {
 			}
 		}
 	})
+}
+
+// TestStringValidator_InlineCustomMessages tests the new inline custom message feature
+func TestStringValidator_InlineCustomMessages(t *testing.T) {
+	t.Run("Required with custom message", func(t *testing.T) {
+		schema := Schema{"name": String().Required("Name is required")}
+		err := Validate(DataObject{"name": ""}, schema)
+		if err == nil {
+			t.Fatal("Expected error")
+		}
+		if err.Errors["name"][0] != "Name is required" {
+			t.Errorf("Expected 'Name is required', got: %s", err.Errors["name"][0])
+		}
+	})
+
+	t.Run("Min with custom message", func(t *testing.T) {
+		schema := Schema{"name": String().Required().Min(3, "Name must be at least 3 characters")}
+		err := Validate(DataObject{"name": "ab"}, schema)
+		if err == nil {
+			t.Fatal("Expected error")
+		}
+		if err.Errors["name"][0] != "Name must be at least 3 characters" {
+			t.Errorf("Expected custom min message, got: %s", err.Errors["name"][0])
+		}
+	})
+
+	t.Run("Max with custom message", func(t *testing.T) {
+		schema := Schema{"name": String().Required().Max(5, "Name too long")}
+		err := Validate(DataObject{"name": "toolongname"}, schema)
+		if err == nil {
+			t.Fatal("Expected error")
+		}
+		if err.Errors["name"][0] != "Name too long" {
+			t.Errorf("Expected 'Name too long', got: %s", err.Errors["name"][0])
+		}
+	})
+
+	t.Run("Email with custom message", func(t *testing.T) {
+		schema := Schema{"email": String().Required().Email("Please enter a valid email")}
+		err := Validate(DataObject{"email": "not-an-email"}, schema)
+		if err == nil {
+			t.Fatal("Expected error")
+		}
+		if err.Errors["email"][0] != "Please enter a valid email" {
+			t.Errorf("Expected custom email message, got: %s", err.Errors["email"][0])
+		}
+	})
+
+	t.Run("URL with custom message", func(t *testing.T) {
+		schema := Schema{"website": String().Required().URL("Invalid website URL")}
+		err := Validate(DataObject{"website": "not-a-url"}, schema)
+		if err == nil {
+			t.Fatal("Expected error")
+		}
+		if err.Errors["website"][0] != "Invalid website URL" {
+			t.Errorf("Expected custom URL message, got: %s", err.Errors["website"][0])
+		}
+	})
+
+	t.Run("Regex with custom message", func(t *testing.T) {
+		schema := Schema{"code": String().Required().Regex(`^\d{4}$`, "Code must be 4 digits")}
+		err := Validate(DataObject{"code": "abc"}, schema)
+		if err == nil {
+			t.Fatal("Expected error")
+		}
+		if err.Errors["code"][0] != "Code must be 4 digits" {
+			t.Errorf("Expected custom regex message, got: %s", err.Errors["code"][0])
+		}
+	})
+
+	t.Run("In with custom message", func(t *testing.T) {
+		schema := Schema{"status": String().Required().InWithMessage("Invalid status", "active", "inactive")}
+		err := Validate(DataObject{"status": "pending"}, schema)
+		if err == nil {
+			t.Fatal("Expected error")
+		}
+		if err.Errors["status"][0] != "Invalid status" {
+			t.Errorf("Expected 'Invalid status', got: %s", err.Errors["status"][0])
+		}
+	})
+
+	t.Run("UUID with custom message", func(t *testing.T) {
+		schema := Schema{"id": String().Required().UUID("Invalid UUID format")}
+		err := Validate(DataObject{"id": "not-a-uuid"}, schema)
+		if err == nil {
+			t.Fatal("Expected error")
+		}
+		if err.Errors["id"][0] != "Invalid UUID format" {
+			t.Errorf("Expected 'Invalid UUID format', got: %s", err.Errors["id"][0])
+		}
+	})
+
+	t.Run("StartsWith with custom message", func(t *testing.T) {
+		schema := Schema{"code": String().Required().StartsWith("PRE_", "Code must start with PRE_")}
+		err := Validate(DataObject{"code": "POST_123"}, schema)
+		if err == nil {
+			t.Fatal("Expected error")
+		}
+		if err.Errors["code"][0] != "Code must start with PRE_" {
+			t.Errorf("Expected custom startsWith message, got: %s", err.Errors["code"][0])
+		}
+	})
+
+	t.Run("EndsWith with custom message", func(t *testing.T) {
+		schema := Schema{"file": String().Required().EndsWith(".pdf", "Only PDF files allowed")}
+		err := Validate(DataObject{"file": "document.doc"}, schema)
+		if err == nil {
+			t.Fatal("Expected error")
+		}
+		if err.Errors["file"][0] != "Only PDF files allowed" {
+			t.Errorf("Expected custom endsWith message, got: %s", err.Errors["file"][0])
+		}
+	})
+
+	t.Run("Contains with custom message", func(t *testing.T) {
+		schema := Schema{"bio": String().Required().Contains("experience", "Bio must mention experience")}
+		err := Validate(DataObject{"bio": "I am a developer"}, schema)
+		if err == nil {
+			t.Fatal("Expected error")
+		}
+		if err.Errors["bio"][0] != "Bio must mention experience" {
+			t.Errorf("Expected custom contains message, got: %s", err.Errors["bio"][0])
+		}
+	})
+
+	t.Run("Alpha with custom message", func(t *testing.T) {
+		schema := Schema{"name": String().Required().Alpha("Name must contain only letters")}
+		err := Validate(DataObject{"name": "John123"}, schema)
+		if err == nil {
+			t.Fatal("Expected error")
+		}
+		if err.Errors["name"][0] != "Name must contain only letters" {
+			t.Errorf("Expected custom alpha message, got: %s", err.Errors["name"][0])
+		}
+	})
+
+	t.Run("AlphaNumeric with custom message", func(t *testing.T) {
+		schema := Schema{"username": String().Required().AlphaNumeric("Username must be alphanumeric")}
+		err := Validate(DataObject{"username": "user@name"}, schema)
+		if err == nil {
+			t.Fatal("Expected error")
+		}
+		if err.Errors["username"][0] != "Username must be alphanumeric" {
+			t.Errorf("Expected custom alphaNumeric message, got: %s", err.Errors["username"][0])
+		}
+	})
+
+	t.Run("Length with custom message", func(t *testing.T) {
+		schema := Schema{"code": String().Required().Length(6, "Code must be exactly 6 characters")}
+		err := Validate(DataObject{"code": "1234"}, schema)
+		if err == nil {
+			t.Fatal("Expected error")
+		}
+		if err.Errors["code"][0] != "Code must be exactly 6 characters" {
+			t.Errorf("Expected custom length message, got: %s", err.Errors["code"][0])
+		}
+	})
+
+	t.Run("IP with custom message", func(t *testing.T) {
+		schema := Schema{"ip": String().Required().IP("Invalid IP address format")}
+		err := Validate(DataObject{"ip": "invalid"}, schema)
+		if err == nil {
+			t.Fatal("Expected error")
+		}
+		if err.Errors["ip"][0] != "Invalid IP address format" {
+			t.Errorf("Expected custom IP message, got: %s", err.Errors["ip"][0])
+		}
+	})
+
+	t.Run("JSON with custom message", func(t *testing.T) {
+		schema := Schema{"data": String().Required().JSON("Must be valid JSON")}
+		err := Validate(DataObject{"data": "not json"}, schema)
+		if err == nil {
+			t.Fatal("Expected error")
+		}
+		if err.Errors["data"][0] != "Must be valid JSON" {
+			t.Errorf("Expected custom JSON message, got: %s", err.Errors["data"][0])
+		}
+	})
+
+	t.Run("Multiple validators with custom messages", func(t *testing.T) {
+		schema := Schema{
+			"email": String().Required("Email is required").Email("Invalid email format"),
+		}
+
+		// Test required message
+		err := Validate(DataObject{"email": ""}, schema)
+		if err == nil || err.Errors["email"][0] != "Email is required" {
+			t.Errorf("Expected 'Email is required', got: %v", err)
+		}
+
+		// Test email message
+		err = Validate(DataObject{"email": "invalid"}, schema)
+		if err == nil || err.Errors["email"][0] != "Invalid email format" {
+			t.Errorf("Expected 'Invalid email format', got: %v", err)
+		}
+	})
+}
+
+// TestStringValidator_MessageFunc tests dynamic message functions
+func TestStringValidator_MessageFunc(t *testing.T) {
+	t.Run("MessageFunc with field context", func(t *testing.T) {
+		schema := Schema{
+			"username": String().Required(func(ctx MessageContext) string {
+				return "The " + ctx.Field + " field is required"
+			}),
+		}
+		err := Validate(DataObject{"username": ""}, schema)
+		if err == nil {
+			t.Fatal("Expected error")
+		}
+		if err.Errors["username"][0] != "The username field is required" {
+			t.Errorf("Expected dynamic message with field, got: %s", err.Errors["username"][0])
+		}
+	})
+
+	t.Run("MessageFunc with value context", func(t *testing.T) {
+		schema := Schema{
+			"email": String().Required().Email(func(ctx MessageContext) string {
+				return "'" + ctx.Value.(string) + "' is not a valid email address"
+			}),
+		}
+		err := Validate(DataObject{"email": "bad-email"}, schema)
+		if err == nil {
+			t.Fatal("Expected error")
+		}
+		if err.Errors["email"][0] != "'bad-email' is not a valid email address" {
+			t.Errorf("Expected dynamic message with value, got: %s", err.Errors["email"][0])
+		}
+	})
+
+	t.Run("MessageFunc with array index context", func(t *testing.T) {
+		schema := Schema{
+			"users": Array().Of(Object().Shape(Schema{
+				"name": String().Required(func(ctx MessageContext) string {
+					if ctx.Index >= 0 {
+						return fmt.Sprintf("User #%d name is required", ctx.Index+1)
+					}
+					return "Name is required"
+				}),
+			})),
+		}
+		err := Validate(DataObject{
+			"users": []any{
+				DataObject{"name": "John"},
+				DataObject{"name": ""},
+			},
+		}, schema)
+		if err == nil {
+			t.Fatal("Expected error")
+		}
+		// Check that the error message contains the index
+		errMsg := err.Errors["users.1.name"][0]
+		if errMsg != "User #2 name is required" {
+			t.Errorf("Expected 'User #2 name is required', got: %s", errMsg)
+		}
+	})
+
+	t.Run("MessageFunc accessing data context", func(t *testing.T) {
+		schema := Schema{
+			"confirm_email": String().Required(func(ctx MessageContext) string {
+				if ctx.Data != nil {
+					if email, ok := ctx.Data["email"].(string); ok {
+						return "Please confirm your email: " + email
+					}
+				}
+				return "Confirmation required"
+			}),
+		}
+		err := Validate(DataObject{
+			"email":         "user@example.com",
+			"confirm_email": "",
+		}, schema)
+		if err == nil {
+			t.Fatal("Expected error")
+		}
+		if err.Errors["confirm_email"][0] != "Please confirm your email: user@example.com" {
+			t.Errorf("Expected message with data context, got: %s", err.Errors["confirm_email"][0])
+		}
+	})
+
+	t.Run("MessageFunc using Data.Get() for nested access", func(t *testing.T) {
+		schema := Schema{
+			"profile": Object().Shape(Schema{
+				"bio": String().Required(func(ctx MessageContext) string {
+					// Use Get() to access nested data
+					name := ctx.Data.Get("profile.name").String()
+					if name != "" {
+						return "Bio is required for user: " + name
+					}
+					return "Bio is required"
+				}),
+			}),
+		}
+		err := Validate(DataObject{
+			"profile": DataObject{
+				"name": "John Doe",
+				"bio":  "",
+			},
+		}, schema)
+		if err == nil {
+			t.Fatal("Expected error")
+		}
+		if err.Errors["profile.bio"][0] != "Bio is required for user: John Doe" {
+			t.Errorf("Expected message with Get(), got: %s", err.Errors["profile.bio"][0])
+		}
+	})
+
+	t.Run("Data.Get() with array index", func(t *testing.T) {
+		schema := Schema{
+			"items": Array().Of(Object().Shape(Schema{
+				"price": Num[float64]().Required().Positive(func(ctx MessageContext) string {
+					// Get item name using Get()
+					path := fmt.Sprintf("items.%d.name", ctx.Index)
+					itemName := ctx.Data.Get(path).String()
+					if itemName != "" {
+						return fmt.Sprintf("Price for '%s' must be positive", itemName)
+					}
+					return "Price must be positive"
+				}),
+			})),
+		}
+		err := Validate(DataObject{
+			"items": []any{
+				DataObject{"name": "Apple", "price": 1.5},
+				DataObject{"name": "Banana", "price": -0.5},
+			},
+		}, schema)
+		if err == nil {
+			t.Fatal("Expected error")
+		}
+		if err.Errors["items.1.price"][0] != "Price for 'Banana' must be positive" {
+			t.Errorf("Expected message with array item name, got: %s", err.Errors["items.1.price"][0])
+		}
+	})
+
+	t.Run("Data.Get() deeply nested value", func(t *testing.T) {
+		schema := Schema{
+			"settings": Object().Shape(Schema{
+				"notifications": Object().Shape(Schema{
+					"email": Bool().Required(func(ctx MessageContext) string {
+						userName := ctx.Data.Get("user.profile.name").String()
+						if userName != "" {
+							return fmt.Sprintf("Email notification setting required for %s", userName)
+						}
+						return "Email notification setting is required"
+					}),
+				}),
+			}),
+		}
+		err := Validate(DataObject{
+			"user": DataObject{
+				"profile": DataObject{
+					"name": "Alice",
+				},
+			},
+			"settings": DataObject{
+				"notifications": DataObject{},
+			},
+		}, schema)
+		if err == nil {
+			t.Fatal("Expected error")
+		}
+		expectedMsg := "Email notification setting required for Alice"
+		if err.Errors["settings.notifications.email"][0] != expectedMsg {
+			t.Errorf("Expected '%s', got: %s", expectedMsg, err.Errors["settings.notifications.email"][0])
+		}
+	})
+}
+
+// TestStringValidator_DefaultMessagesUnchanged verifies default messages still work
+func TestStringValidator_DefaultMessagesUnchanged(t *testing.T) {
+	tests := []struct {
+		name     string
+		schema   Schema
+		data     DataObject
+		expected string
+	}{
+		{
+			name:     "Required default message",
+			schema:   Schema{"name": String().Required()},
+			data:     DataObject{"name": ""},
+			expected: "name is required",
+		},
+		{
+			name:     "Email default message",
+			schema:   Schema{"email": String().Required().Email()},
+			data:     DataObject{"email": "invalid"},
+			expected: "email must be a valid email",
+		},
+		{
+			name:     "Min default message",
+			schema:   Schema{"name": String().Required().Min(5)},
+			data:     DataObject{"name": "ab"},
+			expected: "name must be at least 5 characters",
+		},
+		{
+			name:     "Max default message",
+			schema:   Schema{"name": String().Required().Max(3)},
+			data:     DataObject{"name": "toolong"},
+			expected: "name must be at most 3 characters",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := Validate(tt.data, tt.schema)
+			if err == nil {
+				t.Fatal("Expected error")
+			}
+			for _, errs := range err.Errors {
+				if len(errs) > 0 && errs[0] == tt.expected {
+					return
+				}
+			}
+			t.Errorf("Expected message '%s', got: %v", tt.expected, err.Errors)
+		})
+	}
 }

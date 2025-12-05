@@ -3,6 +3,7 @@ package valet
 import (
 	"context"
 	"errors"
+	"strings"
 )
 
 // Common errors
@@ -12,6 +13,18 @@ var (
 
 // DataObject represents the data to validate (parsed JSON)
 type DataObject = map[string]any
+
+// DataAccessor wraps DataObject to provide convenient access methods
+type DataAccessor map[string]any
+
+// Get retrieves a value from the data using dot-notation path
+// Example: data.Get("user.profile.name") or data.Get("items.0.id")
+func (d DataAccessor) Get(path string) LookupResult {
+	if d == nil {
+		return LookupResult{nil, false}
+	}
+	return lookupPath(map[string]any(d), path)
+}
 
 // Schema is a map of field names to validators
 type Schema map[string]Validator
@@ -205,3 +218,61 @@ type SchemaObject = map[string]any
 
 // SchemaSliceObject is an alias for array of schema objects
 type SchemaSliceObject = []SchemaObject
+
+// ============================================================================
+// MESSAGE CONTEXT AND TEMPLATING
+// ============================================================================
+
+// MessageContext provides contextual information for dynamic error messages
+type MessageContext struct {
+	Field string       // Field name (e.g., "email")
+	Path  string       // Full path (e.g., "users.0.email")
+	Index int          // Array index if inside array (-1 otherwise)
+	Value any          // The actual value being validated
+	Rule  string       // The validation rule that failed (e.g., "required", "min")
+	Param any          // Rule parameter if applicable (e.g., 3 for Min(3))
+	Data  DataAccessor // The root data object being validated (with Get method)
+}
+
+// MessageFunc is a function that generates a custom error message
+type MessageFunc func(ctx MessageContext) string
+
+// MessageArg can be either a string or a MessageFunc
+// This allows flexible error message customization
+type MessageArg interface{}
+
+// resolveMessage resolves a MessageArg to a string
+func resolveMessage(arg MessageArg, ctx MessageContext) string {
+	switch m := arg.(type) {
+	case string:
+		return m
+	case MessageFunc:
+		return m(ctx)
+	case func(MessageContext) string:
+		return m(ctx)
+	default:
+		return ""
+	}
+}
+
+// extractIndex extracts array index from path (returns -1 if not in array)
+func extractIndex(path string) int {
+	// Look for patterns like "field.0" or "field.0.subfield"
+	parts := strings.Split(path, ".")
+	for i := len(parts) - 1; i >= 0; i-- {
+		// Check if this part is a number
+		idx := 0
+		isNum := true
+		for _, c := range parts[i] {
+			if c < '0' || c > '9' {
+				isNum = false
+				break
+			}
+			idx = idx*10 + int(c-'0')
+		}
+		if isNum && len(parts[i]) > 0 {
+			return idx
+		}
+	}
+	return -1
+}

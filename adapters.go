@@ -42,7 +42,7 @@ func (s *SQLAdapter) CheckExists(ctx context.Context, table string, column strin
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	result := make(map[any]bool, len(values))
 	for rows.Next() {

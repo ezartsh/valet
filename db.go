@@ -24,7 +24,7 @@ type DBCheck struct {
 	Rule     ExistsRule
 	IsUnique bool
 	Ignore   any
-	Message  string
+	Message  MessageArg
 }
 
 // DBCheckCollector interface for validators that can collect DB checks

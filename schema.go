@@ -318,7 +318,7 @@ func (v *UnionValidator) Validate(ctx *ValidationContext, value any) map[string]
 	// Try each validator - if any succeeds, the value is valid
 	for _, validator := range v.validators {
 		errs := validator.Validate(ctx, value)
-		if errs == nil || len(errs) == 0 {
+		if len(errs) == 0 {
 			return nil // One validator passed
 		}
 	}

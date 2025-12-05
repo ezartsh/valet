@@ -21,7 +21,7 @@ type ArrayValidator struct {
 	unique         bool      // All elements must be unique
 	exists         *ExistsRule
 	customFn       func(value []any, lookup Lookup) error
-	messages       map[string]string
+	messages       map[string]MessageArg
 	nullable       bool
 	concurrent     int   // Number of goroutines for parallel validation (0 = sequential)
 	contains       []any // Values that must be present in the array
@@ -31,46 +31,64 @@ type ArrayValidator struct {
 // Array creates a new array validator
 func Array() *ArrayValidator {
 	return &ArrayValidator{
-		messages: make(map[string]string),
+		messages: make(map[string]MessageArg),
 	}
 }
 
 // Required marks the field as required
-func (v *ArrayValidator) Required() *ArrayValidator {
+func (v *ArrayValidator) Required(message ...MessageArg) *ArrayValidator {
 	v.required = true
+	if len(message) > 0 {
+		v.messages["required"] = message[0]
+	}
 	return v
 }
 
 // RequiredIf makes field required based on condition
-func (v *ArrayValidator) RequiredIf(fn func(data DataObject) bool) *ArrayValidator {
+func (v *ArrayValidator) RequiredIf(fn func(data DataObject) bool, message ...MessageArg) *ArrayValidator {
 	v.requiredIf = fn
+	if len(message) > 0 {
+		v.messages["required"] = message[0]
+	}
 	return v
 }
 
 // RequiredUnless makes field required unless condition is met
-func (v *ArrayValidator) RequiredUnless(fn func(data DataObject) bool) *ArrayValidator {
+func (v *ArrayValidator) RequiredUnless(fn func(data DataObject) bool, message ...MessageArg) *ArrayValidator {
 	v.requiredUnless = fn
+	if len(message) > 0 {
+		v.messages["required"] = message[0]
+	}
 	return v
 }
 
 // Min sets minimum number of elements
-func (v *ArrayValidator) Min(n int) *ArrayValidator {
+func (v *ArrayValidator) Min(n int, message ...MessageArg) *ArrayValidator {
 	v.min = n
 	v.minSet = true
+	if len(message) > 0 {
+		v.messages["min"] = message[0]
+	}
 	return v
 }
 
 // Max sets maximum number of elements
-func (v *ArrayValidator) Max(n int) *ArrayValidator {
+func (v *ArrayValidator) Max(n int, message ...MessageArg) *ArrayValidator {
 	v.max = n
 	v.maxSet = true
+	if len(message) > 0 {
+		v.messages["max"] = message[0]
+	}
 	return v
 }
 
 // Length sets exact number of elements
-func (v *ArrayValidator) Length(n int) *ArrayValidator {
+func (v *ArrayValidator) Length(n int, message ...MessageArg) *ArrayValidator {
 	v.length = n
 	v.lengthSet = true
+	if len(message) > 0 {
+		v.messages["length"] = message[0]
+	}
 	return v
 }
 
@@ -81,14 +99,17 @@ func (v *ArrayValidator) Of(validator Validator) *ArrayValidator {
 }
 
 // Unique requires all elements to be unique
-func (v *ArrayValidator) Unique() *ArrayValidator {
+func (v *ArrayValidator) Unique(message ...MessageArg) *ArrayValidator {
 	v.unique = true
+	if len(message) > 0 {
+		v.messages["unique"] = message[0]
+	}
 	return v
 }
 
 // Distinct is an alias for Unique (Laravel naming)
-func (v *ArrayValidator) Distinct() *ArrayValidator {
-	return v.Unique()
+func (v *ArrayValidator) Distinct(message ...MessageArg) *ArrayValidator {
+	return v.Unique(message...)
 }
 
 // Contains requires array to contain the specified values
@@ -97,9 +118,23 @@ func (v *ArrayValidator) Contains(values ...any) *ArrayValidator {
 	return v
 }
 
+// ContainsWithMessage requires array to contain specified values with custom message
+func (v *ArrayValidator) ContainsWithMessage(message MessageArg, values ...any) *ArrayValidator {
+	v.contains = values
+	v.messages["contains"] = message
+	return v
+}
+
 // DoesntContain requires array to NOT contain the specified values
 func (v *ArrayValidator) DoesntContain(values ...any) *ArrayValidator {
 	v.doesntContain = values
+	return v
+}
+
+// DoesntContainWithMessage requires array to NOT contain specified values with custom message
+func (v *ArrayValidator) DoesntContainWithMessage(message MessageArg, values ...any) *ArrayValidator {
+	v.doesntContain = values
+	v.messages["doesntContain"] = message
 	return v
 }
 
@@ -116,7 +151,7 @@ func (v *ArrayValidator) Custom(fn func(value []any, lookup Lookup) error) *Arra
 }
 
 // Message sets custom error message for a rule
-func (v *ArrayValidator) Message(rule, message string) *ArrayValidator {
+func (v *ArrayValidator) Message(rule string, message MessageArg) *ArrayValidator {
 	v.messages[rule] = message
 	return v
 }
@@ -148,21 +183,30 @@ func (v *ArrayValidator) Validate(ctx *ValidationContext, value any) map[string]
 	fieldPath := ctx.FullPath()
 	fieldName := ctx.Path[len(ctx.Path)-1]
 
+	// Create base message context
+	msgCtx := MessageContext{
+		Field: fieldName,
+		Path:  fieldPath,
+		Index: extractIndex(fieldPath),
+		Value: value,
+		Data:  DataAccessor(ctx.RootData),
+	}
+
 	// Handle nil
 	if value == nil {
 		if v.nullable {
 			return nil
 		}
 		if v.required {
-			errors[fieldPath] = append(errors[fieldPath], v.msg("required", fmt.Sprintf("%s is required", fieldName)))
+			errors[fieldPath] = append(errors[fieldPath], v.msg("required", fmt.Sprintf("%s is required", fieldName), msgCtx))
 			return errors
 		}
 		if v.requiredIf != nil && v.requiredIf(ctx.RootData) {
-			errors[fieldPath] = append(errors[fieldPath], v.msg("required", fmt.Sprintf("%s is required", fieldName)))
+			errors[fieldPath] = append(errors[fieldPath], v.msg("required", fmt.Sprintf("%s is required", fieldName), msgCtx))
 			return errors
 		}
 		if v.requiredUnless != nil && !v.requiredUnless(ctx.RootData) {
-			errors[fieldPath] = append(errors[fieldPath], v.msg("required", fmt.Sprintf("%s is required", fieldName)))
+			errors[fieldPath] = append(errors[fieldPath], v.msg("required", fmt.Sprintf("%s is required", fieldName), msgCtx))
 			return errors
 		}
 		return nil
@@ -171,25 +215,29 @@ func (v *ArrayValidator) Validate(ctx *ValidationContext, value any) map[string]
 	// Type check
 	arr, ok := value.([]any)
 	if !ok {
-		errors[fieldPath] = append(errors[fieldPath], v.msg("type", fmt.Sprintf("%s must be an array", fieldName)))
+		errors[fieldPath] = append(errors[fieldPath], v.msg("type", fmt.Sprintf("%s must be an array", fieldName), msgCtx))
 		return errors
 	}
 
 	length := len(arr)
+	msgCtx.Value = arr
 
 	// Length check
 	if v.lengthSet && length != v.length {
-		errors[fieldPath] = append(errors[fieldPath], v.msg("length", fmt.Sprintf("%s must have exactly %d elements", fieldName, v.length)))
+		msgCtx.Param = v.length
+		errors[fieldPath] = append(errors[fieldPath], v.msg("length", fmt.Sprintf("%s must have exactly %d elements", fieldName, v.length), msgCtx))
 	}
 
 	// Min check
 	if v.minSet && length < v.min {
-		errors[fieldPath] = append(errors[fieldPath], v.msg("min", fmt.Sprintf("%s must have at least %d elements", fieldName, v.min)))
+		msgCtx.Param = v.min
+		errors[fieldPath] = append(errors[fieldPath], v.msg("min", fmt.Sprintf("%s must have at least %d elements", fieldName, v.min), msgCtx))
 	}
 
 	// Max check
 	if v.maxSet && length > v.max {
-		errors[fieldPath] = append(errors[fieldPath], v.msg("max", fmt.Sprintf("%s must have at most %d elements", fieldName, v.max)))
+		msgCtx.Param = v.max
+		errors[fieldPath] = append(errors[fieldPath], v.msg("max", fmt.Sprintf("%s must have at most %d elements", fieldName, v.max), msgCtx))
 	}
 
 	// Unique check
@@ -198,7 +246,14 @@ func (v *ArrayValidator) Validate(ctx *ValidationContext, value any) map[string]
 		for i, item := range arr {
 			if seen[item] {
 				elementPath := fmt.Sprintf("%s.%d", fieldPath, i)
-				errors[elementPath] = append(errors[elementPath], v.msg("unique", fmt.Sprintf("%s[%d] is a duplicate", fieldName, i)))
+				elemCtx := MessageContext{
+					Field: fieldName,
+					Path:  elementPath,
+					Index: i,
+					Value: item,
+					Data:  DataAccessor(ctx.RootData),
+				}
+				errors[elementPath] = append(errors[elementPath], v.msg("unique", fmt.Sprintf("%s[%d] is a duplicate", fieldName, i), elemCtx))
 			}
 			seen[item] = true
 		}
@@ -215,7 +270,8 @@ func (v *ArrayValidator) Validate(ctx *ValidationContext, value any) map[string]
 				}
 			}
 			if !found {
-				errors[fieldPath] = append(errors[fieldPath], v.msg("contains", fmt.Sprintf("%s must contain %v", fieldName, required)))
+				msgCtx.Param = required
+				errors[fieldPath] = append(errors[fieldPath], v.msg("contains", fmt.Sprintf("%s must contain %v", fieldName, required), msgCtx))
 			}
 		}
 	}
@@ -226,7 +282,15 @@ func (v *ArrayValidator) Validate(ctx *ValidationContext, value any) map[string]
 			for i, item := range arr {
 				if equalValues(item, forbidden) {
 					elementPath := fmt.Sprintf("%s.%d", fieldPath, i)
-					errors[elementPath] = append(errors[elementPath], v.msg("doesntContain", fmt.Sprintf("%s must not contain %v", fieldName, forbidden)))
+					elemCtx := MessageContext{
+						Field: fieldName,
+						Path:  elementPath,
+						Index: i,
+						Value: item,
+						Param: forbidden,
+						Data:  DataAccessor(ctx.RootData),
+					}
+					errors[elementPath] = append(errors[elementPath], v.msg("doesntContain", fmt.Sprintf("%s must not contain %v", fieldName, forbidden), elemCtx))
 				}
 			}
 		}
@@ -288,7 +352,7 @@ func (v *ArrayValidator) Validate(ctx *ValidationContext, value any) map[string]
 			return lookupPath(ctx.RootData, path)
 		}
 		if err := v.customFn(arr, lookup); err != nil {
-			errors[fieldPath] = append(errors[fieldPath], v.msg("custom", err.Error()))
+			errors[fieldPath] = append(errors[fieldPath], v.msg("custom", err.Error(), msgCtx))
 		}
 	}
 
@@ -333,9 +397,10 @@ func (v *ArrayValidator) GetDBChecks(fieldPath string, value any) []DBCheck {
 	return checks
 }
 
-func (v *ArrayValidator) msg(rule, defaultMsg string) string {
+func (v *ArrayValidator) msg(rule, defaultMsg string, msgCtx MessageContext) string {
 	if msg, ok := v.messages[rule]; ok {
-		return msg
+		msgCtx.Rule = rule
+		return resolveMessage(msg, msgCtx)
 	}
 	return defaultMsg
 }

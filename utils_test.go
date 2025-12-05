@@ -83,24 +83,3 @@ func TestLookupPath_EdgeCases(t *testing.T) {
 		}
 	})
 }
-
-func TestBuildFieldPath(t *testing.T) {
-	tests := []struct {
-		name     string
-		path     []string
-		expected string
-	}{
-		{"empty path", []string{}, ""},
-		{"single path", []string{"user"}, "user"},
-		{"multiple path", []string{"user", "profile", "name"}, "user.profile.name"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := buildFieldPath(tt.path)
-			if result != tt.expected {
-				t.Errorf("buildFieldPath(%v) = %s, want %s", tt.path, result, tt.expected)
-			}
-		})
-	}
-}
