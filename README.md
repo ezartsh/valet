@@ -3,7 +3,8 @@
 [![Go Reference](https://pkg.go.dev/badge/github.com/ezartsh/valet.svg)](https://pkg.go.dev/github.com/ezartsh/valet)
 [![Go Report Card](https://goreportcard.com/badge/github.com/ezartsh/valet)](https://goreportcard.com/report/github.com/ezartsh/valet)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Coverage](https://img.shields.io/badge/coverage-81.7%25-brightgreen)](https://github.com/ezartsh/valet)
+[![Coverage](https://img.shields.io/badge/coverage-90.1%25-brightgreen)](https://github.com/ezartsh/valet)
+[![Security](https://img.shields.io/badge/security-govulncheck-green)](https://pkg.go.dev/golang.org/x/vuln/cmd/govulncheck)
 
 A high-performance, Zod-inspired validation library for Go with a fluent builder API. Works with dynamic map data (`map[string]any`) - perfect for validating JSON payloads, API requests, and configuration data without requiring pre-defined structs.
 
